@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 
-from core.brain import ask_ai
+from core.brain import ask_ai, clear_chat_history
 from core.db_service import (
     add_event, add_transaction, get_monthly_summary,
     get_recent_transactions, get_upcoming_events, save_slip,
@@ -179,6 +179,11 @@ def handle_text_message(reply_token, session_key, text, request):
         reply_text(reply_token, "ลบบันทึกทั้งหมดแล้วครับ 🗑")
         return
 
+    if normalized in {"ล้างแชท", "ลบประวัติแชท", "clear chat"}:
+        clear_chat_history(session_key)
+        reply_text(reply_token, "ล้างประวัติการสนทนาแล้วครับ 🗑")
+        return
+
     # ── Finance ──
     if normalized in INCOME_COMMANDS:
         reply_text(reply_token, "พิมพ์ 'รายรับ: จำนวน หมวดหมู่' ครับ\nเช่น 'รายรับ: 5000 เงินเดือน'")
@@ -266,7 +271,7 @@ def handle_text_message(reply_token, session_key, text, request):
         return
 
     # ── Default AI ──
-    reply_text(reply_token, ask_ai(raw_text))
+    reply_text(reply_token, ask_ai(raw_text, user_id=session_key))
 
 
 # ── Image ─────────────────────────────────────────────────────────────────────
