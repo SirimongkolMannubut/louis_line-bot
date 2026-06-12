@@ -48,12 +48,8 @@ def normalize_ocr_text(text: str) -> str:
 
 
 def has_tesseract() -> bool:
+    import shutil
     cmd = pytesseract.pytesseract.tesseract_cmd
     if cmd and cmd != "tesseract":
         return Path(cmd).exists()
-    return any(
-        Path(path).joinpath("tesseract.exe").exists()
-        or Path(path).joinpath("tesseract").exists()
-        for path in os.getenv("PATH", "").split(os.pathsep)
-        if path
-    )
+    return shutil.which("tesseract") is not None
