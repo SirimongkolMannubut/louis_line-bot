@@ -34,6 +34,7 @@ from core.knowledge_base import (
 )
 from core.line_pdf_sessions import (
     add_image,
+    add_slip_amount,
     clear_session,
     get_session,
     set_waiting_for_filename,
@@ -77,12 +78,13 @@ OCR_COMMANDS = {
     "ocr",
 }
 SLIP_COMMANDS = {"บันทึกสลิป", "อ่านสลิป", "สแกนสลิป", "slip"}
+MULTI_SLIP_COMMANDS = {"รวมสลิป", "นับสลิป", "รวมยอดสลิป", "รวมโอน", "เช็คยอดสลิป"}
 TRANSLATE_COMMANDS = {"แปลภาษา", "แปล", "translate"}
 NOTE_COMMANDS = {"จดบันทึก", "บันทึก", "note"}
 NOTE_LIST_COMMANDS = {"ดูบันทึก", "รายการบันทึก"}
 NOTE_CLEAR_COMMANDS = {"ลบบันทึก", "ล้างบันทึก"}
-INCOME_COMMANDS = {"รายรับ", "รับเงิน", "income"}
-EXPENSE_COMMANDS = {"รายจ่าย", "จ่ายเงิน", "expense", "ค่าใช้จ่าย"}
+INCOME_COMMANDS = {"รายรับ", "รับเงิน", "income", "บันทึกรายรับ"}
+EXPENSE_COMMANDS = {"รายจ่าย", "จ่ายเงิน", "expense", "ค่าใช้จ่าย", "บันทึกรายจ่าย"}
 SUMMARY_COMMANDS = {"สรุปรายรับรายจ่าย", "สรุปการเงิน", "สรุปเดือนนี้", "รายงานการเงิน"}
 RECENT_COMMANDS = {"รายการล่าสุด", "ประวัติรายการ"}
 EVENT_COMMANDS = {"นัดหมาย", "เพิ่มนัด", "ตั้งนัด", "event", "ปฏิทิน"}
@@ -232,15 +234,22 @@ def handle_text_message(reply_token, session_key, text, request):
         reply_text(reply_token, ask_ai(f"แปลข้อความนี้ ตอบแค่คำแปลเท่านั้น:\n{raw_text}"))
         return
 
-    # ── Notes ──
-    if normalized in NOTE_COMMANDS:
-        reply_text(reply_token, "พิมพ์ 'บันทึก: ข้อความ' เพื่อบันทึกครับ")
-        return
-    if re.match(r"^(บันทึก|จดบันทึก|note)\s*:", normalized):
-        content = raw_text.split(":", 1)[-1].strip()
+    # ── Notes ── (รองรับทั้งแบบ บันทึก: ข้อความ และ บันทึก ข้อความ)
+    if re.match(r"^(บันทึก|จดบันทึก|note)\s*[:：]?\s+\S", normalized):
+        sep = ":" if ":" in raw_text else " "
+        content = raw_text.split(sep, 1)[-1].strip()
         if content:
             save_note(session_key, content)
-            reply_text(reply_token, f"บันทึกแล้วครับ ✅\n📝 {content}")
+            reply_text(reply_token, f"📝 บันทึกแล้วครับ\n{content}")
+        return
+    if normalized in NOTE_COMMANDS:
+        reply_text(
+            reply_token,
+            "📝 บันทึกข้อความ\n\nพิมพ์ได้เลยครับ เช่น\n"
+            "• บันทึก ประชุมพรุ่งนี้ 10 โมง\n"
+            "• บันทึก ซื้อของที่ต้องการ\n"
+            "• บันทึก: ไอเดียโปรเจกต์",
+        )
         return
     if normalized in NOTE_LIST_COMMANDS:
         reply_text(reply_token, get_notes(session_key))
@@ -262,20 +271,16 @@ def handle_text_message(reply_token, session_key, text, request):
 
     # ── Finance ──
     if normalized in INCOME_COMMANDS:
-        reply_text(
-            reply_token, "พิมพ์ 'รายรับ: จำนวน หมวดหมู่' ครับ\nเช่น 'รายรับ: 5000 เงินเดือน'"
-        )
+        reply_text(reply_token, _finance_help_msg("income"))
         return
-    if re.match(r"^รายรับ\s*:", normalized):
+    if _is_income_text(normalized):
         _handle_finance(reply_token, user_id, raw_text, "income")
         return
 
     if normalized in EXPENSE_COMMANDS:
-        reply_text(
-            reply_token, "พิมพ์ 'รายจ่าย: จำนวน หมวดหมู่' ครับ\nเช่น 'รายจ่าย: 250 ค่าน้ำ'"
-        )
+        reply_text(reply_token, _finance_help_msg("expense"))
         return
-    if re.match(r"^(รายจ่าย|ค่า\w+)\s*[\d:]", normalized):
+    if _is_expense_text(normalized):
         _handle_finance(reply_token, user_id, raw_text, "expense")
         return
 
@@ -305,18 +310,26 @@ def handle_text_message(reply_token, session_key, text, request):
         reply_text(reply_token, "\n".join(lines))
         return
 
-    # ── Events ──
+    # ── Events ── (รองรับ นัด: ชื่อ / นัด ชื่อ วันที่)
+    if re.match(r"^(นัด|ตั้งนัด|เพิ่มนัด)\s*[:：]?\s+\S", normalized):
+        _handle_event(reply_token, user_id, raw_text)
+        return
     if normalized in EVENT_COMMANDS:
         reply_text(
             reply_token,
-            "พิมพ์นัดหมายแบบนี้ครับ\n'นัด: ชื่อ วันที่ เวลา'\nเช่น 'นัด: ประชุม 2026-07-15 09:00'",
+            "📅 บันทึกนัดหมาย\n\nพิมพ์ได้หลายแบบครับ เช่น\n"
+            "• นัด ประชุม 2026-07-20 09:00\n"
+            "• นัด หมอ 2026-07-25\n"
+            "• ตั้งนัด สัมภาษณ์งาน 2026-08-01 13:00",
         )
-        return
-    if re.match(r"^นัด\s*:", normalized):
-        _handle_event(reply_token, user_id, raw_text)
         return
     if normalized in EVENT_LIST_COMMANDS:
         _show_events(reply_token, user_id)
+        return
+
+    # ── Multi-slip command ──
+    if normalized in MULTI_SLIP_COMMANDS:
+        restart_flow(reply_token, session_key, "multi_slip")
         return
 
     # ── Waiting states ──
@@ -329,6 +342,10 @@ def handle_text_message(reply_token, session_key, text, request):
                     "📎 ยังไม่มีรูปในงานนี้ครับ\n"
                     "ส่งรูปอย่างน้อย 1 รูปก่อน แล้วพิมพ์ 'เสร็จแล้ว' ได้เลยครับ",
                 )
+                return
+            # โหมด multi_slip: ประมวลผลทันที ไม่ต้องถามชื่อไฟล์
+            if mode == "multi_slip":
+                _process_multi_slip(reply_token, session_key, user_id)
                 return
             set_waiting_for_filename(session_key)
             reply_text(
@@ -394,15 +411,17 @@ def handle_image_message(reply_token, session_key, message_id, request):
     state = session.get("state", "idle")
     mode = session.get("mode", "pdf")
 
-    # วิเคราะห์รูปด้วย AI ถ้าไม่ได้อยู่ใน flow
+    # ── ดาวน์โหลดรูปก่อนเสมอ ──
+    content, content_type = download_line_message_content(message_id)
+    ext = guess_extension(content_type)
+
+    # ── นอก flow: auto-detect ──
     if state != "waiting_for_images":
-        content, content_type = download_line_message_content(message_id)
-        ext = guess_extension(content_type)
         tmp_path = UPLOAD_DIR / f"tmp_{uuid.uuid4().hex}{ext}"
         tmp_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path.write_bytes(content)
 
-        # ถ้าอยู่ในโหมด KB ให้เพิ่มเอกสาร
+        # โหมด KB
         pending_kb = get_session(session_key).get("pending_kb", "")
         if pending_kb:
             try:
@@ -411,13 +430,9 @@ def handle_image_message(reply_token, session_key, message_id, request):
                     add_document(
                         session_key, pending_kb, ocr_text, {"source": pending_kb}
                     )
-                    from core.line_pdf_sessions import clear_session as cs
-
                     s = get_session(session_key)
                     s.pop("pending_kb", None)
-                    reply_text(
-                        reply_token, f"📚 บันทึกเอกสาร '{pending_kb}' แล้วครับนำไปใช้ได้เลย"
-                    )
+                    reply_text(reply_token, f"📚 บันทึกเอกสาร '{pending_kb}' แล้วครับ")
                 else:
                     reply_text(reply_token, "อ่านข้อความไม่ได้ครับ รูปไม่ชัดพอ")
             except Exception as e:
@@ -428,29 +443,59 @@ def handle_image_message(reply_token, session_key, message_id, request):
 
         try:
             ocr_text = extract_text_from_images([str(tmp_path)])
-            if ocr_text:
-                analysis = ask_ai(
-                    f"วิเคราะห์ข้อความจากรูปนี้ให้ครับ สรุปให้กระชับ:\n{ocr_text[:3000]}"
+        except Exception:
+            ocr_text = ""
+
+        # Auto-detect สลิป → เริ่ม multi_slip อัตโนมัติ
+        if ocr_text and _looks_like_slip(ocr_text):
+            user_dir = UPLOAD_DIR / session_key.replace(":", "_")
+            user_dir.mkdir(parents=True, exist_ok=True)
+            saved_path = user_dir / f"{uuid.uuid4().hex}{ext}"
+            saved_path.write_bytes(content)
+            tmp_path.unlink(missing_ok=True)
+
+            start_pdf_flow(session_key, mode="multi_slip")
+            add_image(session_key, str(saved_path))
+
+            slip = parse_slip(ocr_text)
+            amount = slip.get("amount") or 0.0
+            add_slip_amount(session_key, amount)
+
+            bank_line = f"🏦 {slip['bank']}\n" if slip.get("bank") else ""
+            if amount > 0:
+                reply_text(
+                    reply_token,
+                    f"🧾 ตรวจพบสลิปโอนเงินครับ\n"
+                    f"💰 ยอด: {amount:,.2f} บาท\n"
+                    f"{bank_line}\n"
+                    f"ส่งสลิปเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูยอดรวม",
                 )
-                reply_text(reply_token, f"🔍 วิเคราะห์รูป:\n{analysis}")
             else:
                 reply_text(
                     reply_token,
-                    "📸 รับรูปแล้วครับ ผมช่วยทำอะไรกับรูปนี้ดีครับ?\n\n"
-                    "📄 'ทำ PDF'  — รวมรูปเป็นไฟล์ PDF\n"
-                    "🧾 'สรุปใบเสร็จ'  — อ่านและวิเคราะห์ข้อมูลในรูป\n"
-                    "💸 'บันทึกสลิป'  — อ่านสลิปและบันทึกยอดโอน",
+                    "🧾 ตรวจพบสลิปครับ แต่อ่านยอดไม่ชัด\n"
+                    "ส่งสลิปเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูยอดรวม",
                 )
-        except Exception:
-            reply_text(
-                reply_token, "📸 รับรูปแล้วครับ\nพิมพ์ 'เมนู' เพื่อดูว่าผมช่วยอะไรกับรูปนี้ได้บ้างครับ"
+            return
+
+        # Auto-detect เอกสาร/รูปทั่วไป
+        if ocr_text:
+            analysis = ask_ai(
+                f"วิเคราะห์ข้อความจากรูปนี้ให้ครับ สรุปให้กระชับ:\n{ocr_text[:3000]}"
             )
-        finally:
-            tmp_path.unlink(missing_ok=True)
+            reply_text(reply_token, f"🔍 วิเคราะห์รูป:\n{analysis}")
+        else:
+            reply_text(
+                reply_token,
+                "📸 รับรูปแล้วครับ ผมช่วยอะไรกับรูปนี้ดีครับ?\n\n"
+                "🧾 ส่งสลิปมาตรง ๆ ผมอ่านยอดและรวมให้เลย\n"
+                "📄 'ทำ PDF'  — รวมรูปเป็น PDF\n"
+                "🔍 'สรุปใบเสร็จ'  — อ่านและสรุปเอกสาร",
+            )
+        tmp_path.unlink(missing_ok=True)
         return
 
-    content, content_type = download_line_message_content(message_id)
-    ext = guess_extension(content_type)
+    # ── ใน flow: บันทึกรูปตามปกติ ──
     user_dir = UPLOAD_DIR / session_key.replace(":", "_")
     user_dir.mkdir(parents=True, exist_ok=True)
     image_path = user_dir / f"{uuid.uuid4().hex}{ext}"
@@ -468,22 +513,186 @@ def handle_image_message(reply_token, session_key, message_id, request):
 
     updated = add_image(session_key, str(image_path))
     count = len(updated.get("images", []))
+
+    # โหมด multi_slip: OCR สลิปทันทีและแสดงยอดสะสม
+    if mode == "multi_slip":
+        try:
+            ocr_text = extract_text_from_images([str(image_path)])
+            slip = parse_slip(ocr_text) if ocr_text else {}
+            amount = slip.get("amount") or 0.0
+        except Exception:
+            amount = 0.0
+        updated2 = add_slip_amount(session_key, amount)
+        slip_amounts = updated2.get("slip_amounts", [])
+        total = sum(a for a in slip_amounts if a)
+        n = len(slip_amounts)
+        if amount > 0:
+            reply_text(
+                reply_token,
+                f"🧾 สลิปที่ {n}: {amount:,.2f} บาท\n"
+                f"💰 ยอดสะสม {n} รายการ: {total:,.2f} บาท\n\n"
+                f"ส่งสลิปเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูสรุป",
+            )
+        else:
+            reply_text(
+                reply_token,
+                f"📥 รับสลิปที่ {n} แล้วครับ (อ่านยอดไม่ชัด)\n"
+                f"💰 ยอดสะสมที่อ่านได้: {total:,.2f} บาท\n\n"
+                f"ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว'",
+            )
+        return
+
     reply_text(reply_token, image_received_msg(mode, count))
 
 
-# ── Finance helpers ───────────────────────────────────────────────────────────
-def _handle_finance(reply_token, user_id, raw_text, type_):
-    parts = raw_text.split(":", 1)[-1].strip().split(None, 1)
-    try:
-        amount = float(parts[0].replace(",", ""))
-        category = (
-            parts[1] if len(parts) > 1 else ("รายรับ" if type_ == "income" else "รายจ่าย")
+# ── Multi-slip processor ────────────────────────────────────────────────────
+def _process_multi_slip(reply_token: str, session_key: str, user_id: str) -> None:
+    session = get_session(session_key)
+    images = session.get("images", [])
+    cached_amounts = session.get("slip_amounts", [])
+
+    # ถ้า slip_amounts ยังไม่ครบ (เช่น บางรูปมาก่อน multi_slip mode) ให้ re-OCR
+    if len(cached_amounts) < len(images):
+        cached_amounts = []
+        for img_path in images:
+            try:
+                ocr_text = extract_text_from_images([img_path])
+                slip = parse_slip(ocr_text) if ocr_text else {}
+                cached_amounts.append(slip.get("amount") or 0.0)
+            except Exception:
+                cached_amounts.append(0.0)
+
+    total = sum(a for a in cached_amounts if a)
+    valid = [(i + 1, a) for i, a in enumerate(cached_amounts) if a and a > 0]
+    failed = [i + 1 for i, a in enumerate(cached_amounts) if not a]
+
+    lines = [f"🧾 สรุปสลิป {len(images)} รายการ", "─" * 28]
+    for idx, amt in valid:
+        lines.append(f"✅ สลิปที่ {idx}: {amt:,.2f} บาท")
+    for idx in failed:
+        lines.append(f"⚠️ สลิปที่ {idx}: อ่านยอดไม่ได้")
+    lines += [
+        "─" * 28,
+        f"💰 ยอดรวม: {total:,.2f} บาท",
+        f"📊 อ่านได้ {len(valid)}/{len(images)} รายการ",
+    ]
+    if total > 0:
+        add_transaction(user_id, "income", total, "โอนเงิน (รวมสลิป)")
+        lines.append("\n✅ บันทึกรายรับแล้วครับ")
+
+    clear_session(session_key)
+    cleanup_images(images)
+    reply_text(reply_token, "\n".join(lines))
+
+
+def _looks_like_slip(text: str) -> bool:
+    """ตรวจว่าข้อความ OCR น่าจะเป็นสลิปโอนเงินหรือไม่"""
+    if not text:
+        return False
+    slip_keywords = [
+        "โอน",
+        "transfer",
+        "ธนาคาร",
+        "bank",
+        "บาท",
+        "thb",
+        "เลขอ้างอิง",
+        "ref",
+        "สำเร็จ",
+        "success",
+        "ยอดเงิน",
+        "จ่ายเงิน",
+    ]
+    hit = sum(1 for kw in slip_keywords if kw in text.lower())
+    has_number = bool(_AMOUNT_RE.search(text))
+    return hit >= 2 and has_number
+
+
+# ── Finance helpers ─────────────────────────────────────────────────────────
+_EXPENSE_KEYWORDS = r"(รายจ่าย|จ่าย|ค่า|ใช้ไป|ซื้อ|expense)"
+_INCOME_KEYWORDS = r"(รายรับ|รับ|ได้รับ|โอนเข้า|income|เงินเดือน|ค่าจ้าง|โบนัส)"
+_AMOUNT_RE = re.compile(r"[\d,]+(?:\.\d+)?")
+
+
+def _is_expense_text(text: str) -> bool:
+    has_kw = bool(re.search(_EXPENSE_KEYWORDS, text))
+    has_number = bool(_AMOUNT_RE.search(text))
+    return has_kw and has_number
+
+
+def _is_income_text(text: str) -> bool:
+    has_kw = bool(re.search(_INCOME_KEYWORDS, text))
+    has_number = bool(_AMOUNT_RE.search(text))
+    return has_kw and has_number
+
+
+def _extract_amount_category(raw_text: str, type_: str) -> tuple[float | None, str]:
+    """รองรับหลายรูปแบบ: ค่าน้ำ 270 / 270 ค่าน้ำ / รายจ่าย 270 ค่าน้ำ / รายจ่าย: 270 ค่าน้ำ"""
+    text = raw_text.strip()
+    # ตัด prefix คำสั่ง เช่น รายจ่าย / รายรับ / จ่าย ออกก่อน
+    text = re.sub(
+        r"^(รายจ่าย|รายรับ|จ่ายเงิน|รับเงิน|ใช้ไป|ได้รับ|โอนเข้า|บันทึกรายจ่าย|บันทึกรายรับ)\s*:?\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    nums = _AMOUNT_RE.findall(text)
+    if not nums:
+        return None, text or ("รายรับ" if type_ == "income" else "รายจ่าย")
+
+    for raw_num in nums:
+        try:
+            amount = float(raw_num.replace(",", ""))
+            if amount <= 0:
+                continue
+            # หมวดหมู่ = ข้อความที่เหลือหลังเอาตัวเลขออก
+            category = re.sub(re.escape(raw_num), "", text).strip()
+            category = re.sub(r"\s*บาท\s*", " ", category).strip()
+            category = re.sub(r"\s+", " ", category).strip(" ,.-")
+            if not category:
+                category = "รายรับ" if type_ == "income" else "รายจ่าย"
+            return amount, category
+        except ValueError:
+            continue
+
+    return None, text
+
+
+def _finance_help_msg(type_: str) -> str:
+    if type_ == "income":
+        return (
+            "💚 บันทึกรายรับ\n\n"
+            "พิมพ์ได้หลายแบบครับ เช่น\n"
+            "• รายรับ 5000 เงินเดือน\n"
+            "• เงินเดือน 15000\n"
+            "• รับ 500 ค่าล่วงเวลา\n"
+            "• โบนัส 3000"
         )
-        add_transaction(user_id, type_, amount, category)
-        icon = "💚" if type_ == "income" else "❤️"
-        reply_text(reply_token, f"{icon} บันทึกแล้วครับ\n{category}: {amount:,.2f} บาท")
-    except (ValueError, IndexError):
-        reply_text(reply_token, "รูปแบบไม่ถูกต้องครับ เช่น 'รายจ่าย: 250 ค่าน้ำ'")
+    return (
+        "❤️ บันทึกรายจ่าย\n\n"
+        "พิมพ์ได้หลายแบบครับ เช่น\n"
+        "• ค่าน้ำ 270\n"
+        "• จ่ายค่าไฟ 700\n"
+        "• รายจ่าย 250 ค่าอาหาร\n"
+        "• ซื้อของ 150"
+    )
+
+
+def _handle_finance(reply_token, user_id, raw_text, type_):
+    amount, category = _extract_amount_category(raw_text, type_)
+    if amount is None:
+        reply_text(reply_token, _finance_help_msg(type_))
+        return
+    add_transaction(user_id, type_, amount, category)
+    icon = "💚" if type_ == "income" else "❤️"
+    reply_text(
+        reply_token,
+        f"{icon} บันทึกแล้วครับ\n"
+        f"• หมวด: {category}\n"
+        f"• จำนวน: {amount:,.2f} บาท\n\n"
+        "พิมพ์ 'สรุปเดือนนี้' เพื่อดูยอดรวมได้เลยครับ",
+    )
 
 
 def _handle_event(reply_token, user_id, raw_text):
@@ -530,52 +739,44 @@ def start_flow_msg(mode):
     msgs = {
         "ocr_summary_pdf": (
             "🧠 AI วิเคราะห์เอกสารการเงิน\n\n"
-            "รองรับ:\n"
-            "• ใบเสร็จ / บิล / สลิปโอนเงิน\n\n"
+            "รองรับ: ใบเสร็จ / บิล / สลิปโอนเงิน\n\n"
             "ผมจะช่วย:\n"
-            "✓ OCR อ่านข้อความอัตโนมัติ\n"
+            "✓ อ่านข้อความจากภาพอัตโนมัติ\n"
             "✓ วิเคราะห์และสรุปข้อมูลสำคัญ\n"
             "✓ แยกรายการ หมวดหมู่ ยอดรวม\n"
             "✓ สร้างรายงาน PDF\n\n"
             "📎 ส่งรูปมาได้เลยครับ\n"
-            "พิมพ์ 'เสร็จแล้ว' เมื่อส่งครบ"
+            "เมื่อครบพิมพ์ 'เสร็จแล้ว'"
         ),
         "slip": (
-            "💰 ผู้ช่วยจัดการสลิปโอนเงิน\n\n"
-            "ผมจะ:\n"
-            "✓ อ่านข้อมูลจากสลิปอัตโนมัติ\n"
-            "✓ ดึงยอดเงิน ธนาคาร วันเวลา เลขอ้างอิง\n"
-            "✓ บันทึกลงฐานข้อมูล\n"
-            "✓ สรุปยอดรายวัน รายเดือนได้\n\n"
-            "📎 ส่งรูปสลิปมาได้เลยครับ\n"
-            "พิมพ์ 'เสร็จแล้ว' เมื่อส่งครบ"
+            "🧾 อ่านสลิป + บันทึกยอด\n\n"
+            "ส่งรูปสลิปมาได้เลยครับ ส่งได้หลายรูป\n"
+            "ผมจะอ่านยอดเงินและบันทึกให้\n\n"
+            "เมื่อครบพิมพ์ 'เสร็จแล้ว'"
+        ),
+        "multi_slip": (
+            "🧾 รวมยอดสลิป\n\n"
+            "ส่งรูปสลิปมาได้เลยครับ ส่งได้เยอะแค่ไหนก็ได้\n"
+            "ผมจะอ่านยอดและรวมให้อัตโนมัติ\n\n"
+            "เมื่อส่งครบพิมพ์ 'เสร็จแล้ว' เพื่อดูยอดรวม"
         ),
         "resize": (
             "🖼️ ปรับขนาดรูปภาพ\n\n"
-            "ส่งรูปที่ต้องการมาได้เลยครับ\n"
-            "ผมจะปรับขนาดและรวมเป็น PDF ให้\n\n"
-            "พิมพ์ 'เสร็จแล้ว' เมื่อส่งครบ"
+            "ส่งรูปมาได้เลยครับ ผมจะปรับขนาดและรวมเป็น PDF\n"
+            "เมื่อครบพิมพ์ 'เสร็จแล้ว'"
         ),
     }
-    return msgs.get(mode, "📎 ส่งรูปที่ต้องการรวมเป็น PDF มาได้เลยครับ\nพิมพ์ 'เสร็จแล้ว' เมื่อส่งครบ")
+    return msgs.get(mode, "📎 ส่งรูปมาได้เลยครับ\nเมื่อครบพิมพ์ 'เสร็จแล้ว'")
 
 
 def waiting_msg(mode):
     msgs = {
-        "ocr_summary_pdf": (
-            "📎 ส่งรูปเพิ่มได้เลยครับ\nเมื่อส่งครบแล้วพิมพ์ 'เสร็จแล้ว' ผมจะวิเคราะห์และสรุปให้ทันทีครับ"
-        ),
-        "slip": (
-            "📎 ส่งสลิปเพิ่มได้เลยครับ\nเมื่อส่งครบแล้วพิมพ์ 'เสร็จแล้ว' ผมจะอ่านและบันทึกยอดให้ครับ"
-        ),
-        "resize": (
-            "📎 ส่งรูปเพิ่มได้เลยครับ\n"
-            "เมื่อส่งครบแล้วพิมพ์ 'เสร็จแล้ว' ผมจะปรับขนาดและรวมเป็น PDF ให้ครับ"
-        ),
+        "ocr_summary_pdf": "📎 ส่งรูปเพิ่มได้เลยครับ  หรือพิมพ์ 'เสร็จแล้ว' ให้ผมวิเคราะห์",
+        "slip": "📎 ส่งสลิปเพิ่มได้เลยครับ  หรือพิมพ์ 'เสร็จแล้ว' ให้ผมรวมยอด",
+        "multi_slip": "📎 ส่งสลิปเพิ่มได้เลยครับ  หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูยอดรวม",
+        "resize": "📎 ส่งรูปเพิ่มได้เลยครับ  หรือพิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF",
     }
-    return msgs.get(
-        mode, "📎 ส่งรูปเพิ่มได้เลยครับ\nเมื่อส่งครบแล้วพิมพ์ 'เสร็จแล้ว' ผมจะสร้าง PDF ให้ครับ"
-    )
+    return msgs.get(mode, "📎 ส่งรูปเพิ่มได้เลยครับ  หรือพิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF")
 
 
 def image_received_msg(mode, count):
@@ -673,32 +874,42 @@ def clear_notes(session_key):
 
 # ── Messages ──────────────────────────────────────────────────────────────────
 def build_welcome_message():
-    return f"สวัสดีครับ ผมคือ {BOT_NAME} 🤖\nพิมพ์ 'เมนู' เพื่อดูสิ่งที่ผมช่วยได้ครับ"
+    return (
+        f"สวัสดีครับ ผมคือ {BOT_NAME} 🤖\n\n"
+        "ผมช่วยได้หลายอย่างครับ เช่น\n"
+        "🧾 ส่งสลิปมาตรง ๆ → ผมอ่านยอดและรวมให้เลย\n"
+        "📄 'ทำ PDF' → รวมรูปเป็น PDF\n"
+        "💰 'ค่าน้ำ 270' → บันทึกรายจ่าย\n"
+        "📝 'บันทึก ข้อความ' → จดบันทึก\n\n"
+        "พิมพ์ 'เมนู' เพื่อดูทุกฟีเจอร์ หรือถามได้เลยครับ 💬"
+    )
 
 
 def build_help_message():
     return (
-        f"🤖 {BOT_NAME} ช่วยได้ดังนี้\n\n"
+        f"🤖 {BOT_NAME}  ใช้งานได้ดังนี้\n"
+        "════════════════════\n"
+        "🧾 สลิปโอนเงิน\n"
+        "  ส่งสลิปมาตรง ๆ → อ่านยอดอัตโนมัติ\n"
+        "  รวมสลิป → รวมยอดหลายสลิปพร้อมกัน\n\n"
         "📄 PDF & เอกสาร\n"
-        "  • ทำ PDF\n"
-        "  • สรุปใบเสร็จ / อ่านบิล\n"
-        "  • บันทึกสลิป\n"
-        "  • ปรับขนาดรูป\n\n"
-        "💰 การเงิน\n"
-        "  • รายรับ: จำนวน หมวดหมู่\n"
-        "  • รายจ่าย: จำนวน หมวดหมู่\n"
-        "  • สรุปเดือนนี้\n"
-        "  • รายการล่าสุด\n\n"
+        "  ทำ PDF → รวมรูปเป็น PDF\n"
+        "  สรุปใบเสร็จ → อ่าน+สรุปเอกสาร\n\n"
+        "💰 บันทึกการเงิน (พิมพ์ตามสบาย)\n"
+        "  ค่าน้ำ 270\n"
+        "  เงินเดือน 15000\n"
+        "  สรุปเดือนนี้ / รายการล่าสุด\n\n"
         "📅 นัดหมาย\n"
-        "  • นัด: ชื่อ วันที่ เวลา\n"
-        "  • ดูนัดหมาย\n\n"
+        "  นัด ประชุม 2026-07-20 09:00\n"
+        "  ดูนัดหมาย\n\n"
         "📝 บันทึก\n"
-        "  • บันทึก: ข้อความ\n"
-        "  • ดูบันทึก / ลบบันทึก\n\n"
-        "🌐 อื่นๆ\n"
-        "  • แปลเป็นอังกฤษ: ข้อความ\n"
-        "  • ส่งรูป → วิเคราะห์อัตโนมัติ\n"
-        "  • ถามอะไรก็ได้ครับ 💬"
+        "  บันทึก ข้อความใดก็ได้\n"
+        "  ดูบันทึก / ลบบันทึก\n\n"
+        "🌐 อื่น ๆ\n"
+        "  แปลเป็นอังกฤษ: ข้อความ\n"
+        "  ถามอะไรก็ได้ครับ 💬\n"
+        "════════════════════\n"
+        "พิมพ์ 'ยกเลิก' เพื่อหยุดงานปัจจุบัน"
     )
 
 

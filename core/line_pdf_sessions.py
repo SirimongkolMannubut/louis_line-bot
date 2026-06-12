@@ -31,6 +31,10 @@ def save_sessions(sessions: dict[str, Any]) -> None:
         json.dump(sessions, f, ensure_ascii=False, indent=2)
 
 
+def _default_session() -> dict[str, Any]:
+    return {"state": "idle", "mode": "pdf", "images": [], "slip_amounts": []}
+
+
 def get_session(session_key: str) -> dict[str, Any]:
     sessions = load_sessions()
     session = sessions.get(session_key)
@@ -38,8 +42,9 @@ def get_session(session_key: str) -> dict[str, Any]:
         session.setdefault("state", "idle")
         session.setdefault("mode", "pdf")
         session.setdefault("images", [])
+        session.setdefault("slip_amounts", [])
         return session
-    return {"state": "idle", "mode": "pdf", "images": []}
+    return _default_session()
 
 
 def start_pdf_flow(session_key: str, mode: str = "pdf") -> dict[str, Any]:
@@ -48,6 +53,7 @@ def start_pdf_flow(session_key: str, mode: str = "pdf") -> dict[str, Any]:
         "state": "waiting_for_images",
         "mode": mode,
         "images": [],
+        "slip_amounts": [],
         "updated_at": _now_iso(),
     }
     sessions[session_key] = session
@@ -57,11 +63,10 @@ def start_pdf_flow(session_key: str, mode: str = "pdf") -> dict[str, Any]:
 
 def add_image(session_key: str, image_path: str) -> dict[str, Any]:
     sessions = load_sessions()
-    session = sessions.get(
-        session_key, {"state": "waiting_for_images", "mode": "pdf", "images": []}
-    )
+    session = sessions.get(session_key, _default_session())
     session.setdefault("mode", "pdf")
     session.setdefault("images", [])
+    session.setdefault("slip_amounts", [])
     session["state"] = "waiting_for_images"
     session["images"].append(image_path)
     session["updated_at"] = _now_iso()
@@ -70,12 +75,25 @@ def add_image(session_key: str, image_path: str) -> dict[str, Any]:
     return session
 
 
+def add_slip_amount(session_key: str, amount: float) -> dict[str, Any]:
+    """เพิ่มยอดสลิปเข้า session สำหรับโหมด multi_slip"""
+    sessions = load_sessions()
+    session = sessions.get(session_key, _default_session())
+    session.setdefault("slip_amounts", [])
+    session["slip_amounts"].append(amount)
+    session["updated_at"] = _now_iso()
+    sessions[session_key] = session
+    save_sessions(sessions)
+    return session
+
+
 def set_waiting_for_filename(session_key: str) -> dict[str, Any]:
     sessions = load_sessions()
-    session = sessions.get(session_key, {"state": "idle", "mode": "pdf", "images": []})
+    session = sessions.get(session_key, _default_session())
     session["state"] = "waiting_for_filename"
     session.setdefault("mode", "pdf")
     session.setdefault("images", [])
+    session.setdefault("slip_amounts", [])
     session["updated_at"] = _now_iso()
     sessions[session_key] = session
     save_sessions(sessions)
@@ -84,6 +102,6 @@ def set_waiting_for_filename(session_key: str) -> dict[str, Any]:
 
 def clear_session(session_key: str) -> dict[str, Any]:
     sessions = load_sessions()
-    session = sessions.pop(session_key, {"state": "idle", "mode": "pdf", "images": []})
+    session = sessions.pop(session_key, _default_session())
     save_sessions(sessions)
     return session
