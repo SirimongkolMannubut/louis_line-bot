@@ -78,7 +78,21 @@ OCR_COMMANDS = {
     "ocr",
 }
 SLIP_COMMANDS = {"บันทึกสลิป", "อ่านสลิป", "สแกนสลิป", "slip"}
-MULTI_SLIP_COMMANDS = {"รวมสลิป", "นับสลิป", "รวมยอดสลิป", "รวมโอน", "เช็คยอดสลิป"}
+MULTI_SLIP_COMMANDS = {
+    "รวมสลิป",
+    "นับสลิป",
+    "รวมยอดสลิป",
+    "รวมโอน",
+    "เช็คยอดสลิป",
+    "รวมสลิปโอนเงิน",
+    "สรุปสลิป",
+    "สรุปยอดสลิป",
+    "เช็คยอดโอน",
+    "รวมยอดโอนเงิน",
+    "อ่านสลิปทั้งหมด",
+    "สรุปยอดโอน",
+    "รวมเงินโอน",
+}
 TRANSLATE_COMMANDS = {"แปลภาษา", "แปล", "translate"}
 NOTE_COMMANDS = {"จดบันทึก", "บันทึก", "note"}
 NOTE_LIST_COMMANDS = {"ดูบันทึก", "รายการบันทึก"}
@@ -342,7 +356,7 @@ def handle_text_message(reply_token, session_key, text, request):
         return
 
     # ── Multi-slip command ──
-    if normalized in MULTI_SLIP_COMMANDS:
+    if _is_multi_slip_cmd(normalized):
         restart_flow(reply_token, session_key, "multi_slip")
         return
 
@@ -501,10 +515,11 @@ def handle_image_message(reply_token, session_key, message_id, request):
         else:
             reply_text(
                 reply_token,
-                "📸 รับรูปแล้วครับ ผมช่วยอะไรกับรูปนี้ดีครับ?\n\n"
-                "🧾 ส่งสลิปมาตรง ๆ ผมอ่านยอดและรวมให้เลย\n"
-                "📄 'ทำ PDF'  — รวมรูปเป็น PDF\n"
-                "🔍 'สรุปใบเสร็จ'  — อ่านและสรุปเอกสาร",
+                "📸 รับรูปแล้วครับ\n\n"
+                "🧾 ถ้าเป็นสลิปโอนเงิน\n"
+                "   พิมพ์ 'รวมสลิป' แล้วส่งรูปสลิปมาใหม่ครับ\n\n"
+                "📄 ถ้าต้องการรวมรูปเป็น PDF → 'ทำ PDF'\n"
+                "🔍 ถ้าต้องการอ่านเอกสาร → 'สรุปใบเสร็จ'",
             )
         tmp_path.unlink(missing_ok=True)
         return
@@ -583,6 +598,20 @@ def _process_multi_slip(reply_token: str, session_key: str, user_id: str) -> Non
     failed = [i + 1 for i, a in enumerate(cached_amounts) if not a]
 
     lines = [f"🧾 สรุปสลิป {len(images)} รายการ", "─" * 28]
+
+    if not any(cached_amounts):
+        # OCR ล้มเหลวทั้งหมด
+        clear_session(session_key)
+        cleanup_images(images)
+        reply_text(
+            reply_token,
+            f"รับสลิป {len(images)} รูปแล้วครับ แต่ยังอ่านยอดไม่ได้\n\n"
+            "สาเหตุที่เป็นไปได้:\n"
+            "• รูปไม่ชัดพอ ลองถ่ายใหม่ให้ชัดขึ้น\n"
+            "• ระบบ OCR ยังไม่พร้อมให้ deploy ใหม่อีกครั้งครับ",
+        )
+        return
+
     for idx, amt in valid:
         lines.append(f"✅ สลิปที่ {idx}: {amt:,.2f} บาท")
     for idx in failed:
@@ -599,6 +628,24 @@ def _process_multi_slip(reply_token: str, session_key: str, user_id: str) -> Non
     clear_session(session_key)
     cleanup_images(images)
     reply_text(reply_token, "\n".join(lines))
+
+
+def _is_multi_slip_cmd(text: str) -> bool:
+    """จับคำสั่งรวมสลิปได้หลายแบบ ทั้ง exact match และ pattern"""
+    if text in MULTI_SLIP_COMMANDS:
+        return True
+    patterns = [
+        r"รวม.{0,6}สลิป",
+        r"สลิป.{0,6}รวม",
+        r"สลิป.{0,6}สรุป",
+        r"นับ.{0,4}สลิป",
+        r"รวม.{0,6}โอน",
+        r"สรุป.{0,6}โอน",
+        r"รวม.{0,6}ยอดสลิป",
+        r"สลิป.*หลาย",
+        r"หลาย.*สลิป",
+    ]
+    return any(re.search(p, text) for p in patterns)
 
 
 def _looks_like_slip(text: str) -> bool:

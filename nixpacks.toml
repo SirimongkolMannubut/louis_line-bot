@@ -1,2 +1,10 @@
 [phases.setup]
-aptPkgs = ["tesseract-ocr", "tesseract-ocr-tha", "tesseract-ocr-eng"]
+aptPkgs = [
+  "tesseract-ocr",
+  "tesseract-ocr-tha",
+  "tesseract-ocr-eng",
+  "libtesseract-dev"
+]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
