@@ -87,6 +87,20 @@ def add_slip_amount(session_key: str, amount: float) -> dict[str, Any]:
     return session
 
 
+def add_slip_entry(session_key: str, entry: dict[str, Any]) -> dict[str, Any]:
+    """เพิ่มข้อมูลสลิปเต็ม (bank, amount, ref, date) พร้อมกันกับสิ่งที่เก็บไว้แล้ว"""
+    sessions = load_sessions()
+    session = sessions.get(session_key, _default_session())
+    session.setdefault("slip_data", [])
+    session["slip_data"].append(entry)
+    session.setdefault("slip_amounts", [])
+    session["slip_amounts"].append(entry.get("amount") or 0.0)
+    session["updated_at"] = _now_iso()
+    sessions[session_key] = session
+    save_sessions(sessions)
+    return session
+
+
 def set_waiting_for_filename(session_key: str) -> dict[str, Any]:
     sessions = load_sessions()
     session = sessions.get(session_key, _default_session())

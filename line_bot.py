@@ -35,6 +35,7 @@ from core.knowledge_base import (
 from core.line_pdf_sessions import (
     add_image,
     add_slip_amount,
+    add_slip_entry,
     clear_session,
     get_session,
     set_waiting_for_filename,
@@ -105,6 +106,11 @@ MULTI_SLIP_COMMANDS = {
     "อ่านสลิปทั้งหมด",
     "สรุปยอดโอน",
     "รวมเงินโอน",
+    "สรุปยอดจากสลิป",
+    "สรุปยอดสลิปทั้งหมด",
+    "เช็คสลิป",
+    "อ่านสลิป",
+    "สรุปเงินโอน",
 }
 TRANSLATE_COMMANDS = {"แปลภาษา", "แปล", "translate"}
 NOTE_COMMANDS = {"จดบันทึก", "บันทึก", "note"}
@@ -397,11 +403,7 @@ def handle_text_message(reply_token, session_key, text, request):
         if normalized in DONE_COMMANDS:
             images = session.get("images", [])
             if not images:
-                reply_text(
-                    reply_token,
-                    "📎 ยังไม่มีรูปในงานนี้ครับ\n"
-                    "ส่งรูปอย่างน้อย 1 รูปก่อน แล้วพิมพ์ 'เสร็จแล้ว' ได้เลยครับ",
-                )
+                reply_text(reply_token, "📎 ยังไม่มีรูปครับ ส่งอย่างน้อย 1 รูปก่อนเลยครับ")
                 return
             if mode == "multi_slip":
                 _process_and_summarize_slips(reply_token, session_key, user_id)
@@ -409,16 +411,15 @@ def handle_text_message(reply_token, session_key, text, request):
             if mode == "ocr_summary_pdf":
                 _process_and_summarize_receipts(reply_token, session_key)
                 return
-            # โหมด pdf / resize: ยังถามชื่อไฟล์
             set_waiting_for_filename(session_key)
             reply_text(
                 reply_token,
-                f"✅ รับรูปครบแล้ว {len(images)} รูปครับ\n\n"
-                "📝 กรุณาตั้งชื่อไฟล์ PDF ได้เลยครับ\n"
-                "เช่น  รูปถ่าย-มิถุนายน  หรือ  เอกสาร 2026",
+                f"✅ รับรูปครบแล้ว {len(images)} รูปครับ\nตั้งชื่อไฟล์ได้เลยครับ เช่น รูป-2026",
             )
             return
-        reply_text(reply_token, waiting_msg(mode))
+        # ถ้าไม่ใช่คำสั่ง ตอบคำถามผ่าน AI ได้ (ไม่ reset state)
+        hint = f"[{waiting_msg(mode)}]"
+        reply_text(reply_token, ask_ai(f"{raw_text}\n{hint}", user_id=user_id))
         return
 
     # ── รอยืนยันว่าจะสร้าง PDF ไหม ──
@@ -606,21 +607,34 @@ def handle_image_message(reply_token, session_key, message_id, request):
     updated = add_image(session_key, str(image_path))
     count = len(updated.get("images", []))
 
-    # ── โหมด multi_slip: ใช้ Vision LLM อ่านสลิปทันที ──
+    # ── multi_slip: อ่านสลิปทันทีและเก็บ full data ──
     if mode == "multi_slip":
         try:
-            slip = read_slip(str(image_path))  # Vision LLM อ่านสลิป
+            slip = read_slip(str(image_path))
             amount = slip.get("amount") or 0.0
         except Exception:
+            slip = {"amount": 0.0, "bank": "", "ref": "", "datetime": ""}
             amount = 0.0
-        updated2 = add_slip_amount(session_key, amount)
+
+        # เก็บทั้ง full data และ amount ในครั้งเดียว
+        updated2 = add_slip_entry(
+            session_key,
+            {
+                "amount": amount,
+                "bank": slip.get("bank", ""),
+                "ref": slip.get("ref", ""),
+                "date": slip.get("datetime", ""),
+                "img_path": str(image_path),
+            },
+        )
         slip_amounts = updated2.get("slip_amounts", [])
         total = sum(a for a in slip_amounts if a)
         n = len(slip_amounts)
+        bank_str = f"  ({slip.get('bank')})" if slip.get("bank") else ""
         if amount > 0:
             reply_text(
                 reply_token,
-                f"🧾 สลิปที่ {n}: {amount:,.2f} บาท\n"
+                f"🧾 สลิปที่ {n}: {amount:,.2f} บาท{bank_str}\n"
                 f"💰 ยอดสะสม {n} รายการ: {total:,.2f} บาท\n\n"
                 f"ส่งสลิปเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูสรุป",
             )
@@ -640,26 +654,26 @@ def handle_image_message(reply_token, session_key, message_id, request):
 def _process_and_summarize_slips(
     reply_token: str, session_key: str, user_id: str
 ) -> None:
-    """อ่านสลิปทั้งหมด → สรุปในแชท → ถาม PDF"""
+    """สรุปสลิปจาก slip_data ที่เก็บไว้แล้ว (ไม่ต้อง re-read)"""
     session = get_session(session_key)
     images = session.get("images", [])
-    cached_amounts = session.get("slip_amounts", [])
 
-    reply_text(reply_token, "⏳ กำลังอ่านสลิป... รอสักครู่ครับ")
+    # ใช้ slip_data ที่เก็บไว้ตอนรับรูปก่อนเลย – ไม่ต้อง API call เพิ่ม
+    slip_data: list[dict] = session.get("slip_data", [])
 
-    slip_data: list[dict] = []
-    for i, img_path in enumerate(images):
-        # ใช้โมดลที่ cache ไว้แล้วถ้ามี ไม่งั้น OCR ใหม่
-        if i < len(cached_amounts) and cached_amounts[i]:
-            slip_data.append(
-                {"amount": cached_amounts[i], "bank": "", "ref": "", "date": ""}
-            )
-        else:
+    # fallback: ถ้า slip_data ยังไม่ครบ (session เก่าแบบที่ไม่มี slip_data)
+    if len(slip_data) < len(images):
+        reply_text(reply_token, "⏳ กำลังอ่านสลิปที่ยังไม่ได้อ่าน... รอสักครู่ครับ")
+        missing = images[len(slip_data) :]
+        for img_path in missing:
             try:
                 data = read_slip(img_path)
                 slip_data.append(data)
             except Exception:
                 slip_data.append({"amount": 0.0, "bank": "", "ref": "", "date": ""})
+    else:
+        # ข้อมูลครบพร้อมแล้ว ไม่ต้องรอ
+        pass
 
     total = sum(d.get("amount", 0) or 0 for d in slip_data)
     valid = [(i + 1, d) for i, d in enumerate(slip_data) if d.get("amount")]
