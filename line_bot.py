@@ -18,12 +18,18 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 
 from core.brain import ask_ai
+from core.db_service import (
+    add_event, add_transaction, get_monthly_summary,
+    get_recent_transactions, get_upcoming_events, save_slip,
+)
 from core.line_pdf_sessions import (
     add_image, clear_session, get_session,
     set_waiting_for_filename, start_pdf_flow,
 )
 from core.ocr_service import OCRUnavailableError, extract_text_from_images
 from core.pdf_service import build_pdf_from_images
+from core.scheduler import start_scheduler
+from core.slip_parser import parse_slip
 
 load_dotenv()
 
@@ -36,28 +42,37 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 NOTES_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-LINE_CHANNEL_SECRET      = os.getenv("LINE_CHANNEL_SECRET", "")
+LINE_CHANNEL_SECRET       = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
-PUBLIC_BASE_URL          = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
-BOT_NAME                 = os.getenv("BOT_NAME", "LouisAI")
+PUBLIC_BASE_URL           = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+BOT_NAME                  = os.getenv("BOT_NAME", "LouisAI")
 
 LINE_REPLY_ENDPOINT   = "https://api.line.me/v2/bot/message/reply"
 LINE_CONTENT_ENDPOINT = "https://api-data.line.me/v2/bot/message/{message_id}/content"
 
 # ── Commands ──────────────────────────────────────────────────────────────────
-PDF_COMMANDS = {"ทำ pdf","ทำpdf","รวมรูปเป็น pdf","รวมรูปเป็นpdf","แปลงรูปเป็น pdf","แปลงรูปเป็นpdf"}
-OCR_COMMANDS = {"สรุปใบเสร็จ","อ่านใบเสร็จ","อ่านบิล","สรุปบิล","สรุปเอกสาร","อ่านเอกสาร","ocr pdf","ocr"}
-TRANSLATE_COMMANDS = {"แปลภาษา","แปล","translate"}
-NOTE_COMMANDS = {"จดบันทึก","บันทึก","จดโน้ต","note"}
-NOTE_LIST_COMMANDS = {"ดูบันทึก","ดูโน้ต","รายการบันทึก","list notes"}
-NOTE_CLEAR_COMMANDS = {"ลบบันทึก","ล้างบันทึก","clear notes"}
-RESIZE_COMMANDS = {"ปรับขนาดรูป","ครอปรูป","resize","ปรับรูป"}
-CANCEL_COMMANDS = {"ยกเลิก","cancel","เริ่มใหม่"}
-DONE_COMMANDS   = {"เสร็จแล้ว","ครบแล้ว","สร้าง pdf","สร้างpdf"}
-HELP_COMMANDS   = {"ช่วยเหลือ","help","เมนู","menu"}
+PDF_COMMANDS        = {"ทำ pdf","ทำpdf","รวมรูปเป็น pdf","แปลงรูปเป็น pdf"}
+OCR_COMMANDS        = {"สรุปใบเสร็จ","อ่านใบเสร็จ","อ่านบิล","สรุปบิล","สรุปเอกสาร","อ่านเอกสาร","ocr"}
+SLIP_COMMANDS       = {"บันทึกสลิป","อ่านสลิป","สแกนสลิป","slip"}
+TRANSLATE_COMMANDS  = {"แปลภาษา","แปล","translate"}
+NOTE_COMMANDS       = {"จดบันทึก","บันทึก","note"}
+NOTE_LIST_COMMANDS  = {"ดูบันทึก","รายการบันทึก"}
+NOTE_CLEAR_COMMANDS = {"ลบบันทึก","ล้างบันทึก"}
+INCOME_COMMANDS     = {"รายรับ","รับเงิน","income"}
+EXPENSE_COMMANDS    = {"รายจ่าย","จ่ายเงิน","expense","ค่าใช้จ่าย"}
+SUMMARY_COMMANDS    = {"สรุปรายรับรายจ่าย","สรุปการเงิน","สรุปเดือนนี้","รายงานการเงิน"}
+RECENT_COMMANDS     = {"รายการล่าสุด","ประวัติรายการ"}
+EVENT_COMMANDS      = {"นัดหมาย","เพิ่มนัด","ตั้งนัด","event","ปฏิทิน"}
+EVENT_LIST_COMMANDS = {"ดูนัดหมาย","นัดหมายทั้งหมด","ตารางงาน"}
+RESIZE_COMMANDS     = {"ปรับขนาดรูป","resize"}
+CANCEL_COMMANDS     = {"ยกเลิก","cancel","เริ่มใหม่"}
+DONE_COMMANDS       = {"เสร็จแล้ว","ครบแล้ว","สร้าง pdf"}
+HELP_COMMANDS       = {"ช่วยเหลือ","help","เมนู","menu"}
 
 app = FastAPI(title=f"{BOT_NAME} LINE Bot")
 app.mount("/files", StaticFiles(directory=str(GENERATED_DIR)), name="files")
+
+start_scheduler()
 
 
 @app.get("/")
@@ -71,15 +86,12 @@ async def line_webhook(
 ) -> dict[str, str]:
     if not LINE_CHANNEL_SECRET or not LINE_CHANNEL_ACCESS_TOKEN:
         raise HTTPException(status_code=500, detail="LINE env not configured.")
-
     body = await request.body()
     if not verify_line_signature(body, x_line_signature, LINE_CHANNEL_SECRET):
-        raise HTTPException(status_code=401, detail="Invalid LINE signature.")
-
+        raise HTTPException(status_code=401, detail="Invalid signature.")
     payload = await request.json()
     for event in payload.get("events", []):
         handle_event(event, request)
-
     return {"status": "ok"}
 
 
@@ -91,19 +103,15 @@ def verify_line_signature(body: bytes, signature: str, secret: str) -> bool:
 def handle_event(event: dict[str, Any], request: Request) -> None:
     event_type  = event.get("type")
     reply_token = event.get("replyToken")
-
     if event_type == "follow" and reply_token:
         reply_text(reply_token, build_welcome_message())
         return
-
     if event_type != "message" or not reply_token:
         return
-
     source       = event.get("source", {})
     session_key  = get_session_key(source)
     message      = event.get("message", {})
     message_type = message.get("type")
-
     if message_type == "text":
         handle_text_message(reply_token, session_key, message.get("text", ""), request)
     elif message_type == "image":
@@ -112,144 +120,196 @@ def handle_event(event: dict[str, Any], request: Request) -> None:
         reply_text(reply_token, build_help_message())
 
 
-# ── Text handler ──────────────────────────────────────────────────────────────
-def handle_text_message(
-    reply_token: str, session_key: str, text: str, request: Request
-) -> None:
+# ── Text ──────────────────────────────────────────────────────────────────────
+def handle_text_message(reply_token, session_key, text, request):
     raw_text   = text.strip()
     normalized = normalize_text(raw_text)
     session    = get_session(session_key)
     state      = session.get("state", "idle")
     mode       = session.get("mode", "pdf")
+    user_id    = session_key
 
-    # ── Cancel ──
     if normalized in CANCEL_COMMANDS:
         old = clear_session(session_key)
         cleanup_images(old.get("images", []))
-        reply_text(reply_token, "ยกเลิกเรียบร้อยแล้วครับ พิมพ์ 'เมนู' เพื่อดูคำสั่งทั้งหมด")
+        reply_text(reply_token, "ยกเลิกเรียบร้อยแล้วครับ พิมพ์ 'เมนู' เพื่อดูคำสั่ง")
         return
 
-    # ── Help ──
     if normalized in HELP_COMMANDS:
         reply_text(reply_token, build_help_message())
         return
 
-    # ── Start flows ──
+    # ── PDF flows ──
     if normalized in PDF_COMMANDS:
-        restart_flow(reply_token, session_key, mode="pdf")
+        restart_flow(reply_token, session_key, "pdf")
         return
-
     if normalized in OCR_COMMANDS:
-        restart_flow(reply_token, session_key, mode="ocr_summary_pdf")
+        restart_flow(reply_token, session_key, "ocr_summary_pdf")
         return
-
+    if normalized in SLIP_COMMANDS:
+        restart_flow(reply_token, session_key, "slip")
+        return
     if normalized in RESIZE_COMMANDS:
-        restart_flow(reply_token, session_key, mode="resize")
+        restart_flow(reply_token, session_key, "resize")
         return
 
     # ── Translate ──
     if normalized in TRANSLATE_COMMANDS:
-        reply_text(reply_token,
-            "ได้เลยครับ พิมพ์ข้อความที่ต้องการแปล แล้วบอกด้วยว่าจะแปลเป็นภาษาอะไร\n"
-            "เช่น: 'แปลเป็นอังกฤษ: สวัสดีครับ' หรือ 'แปลเป็นไทย: Hello world'")
+        reply_text(reply_token, "พิมพ์ข้อความที่ต้องการแปลได้เลยครับ\nเช่น 'แปลเป็นอังกฤษ: สวัสดี' หรือ 'แปลเป็นไทย: Hello'")
         return
-
-    if normalized.startswith("แปลเป็น") or normalized.startswith("translate to"):
-        result = ask_ai(f"แปลข้อความนี้ให้ถูกต้อง แล้วตอบแค่คำแปลเท่านั้น ไม่ต้องอธิบาย:\n{raw_text}")
-        reply_text(reply_token, result)
+    if re.match(r"^แปลเป็น|^translate to", normalized):
+        reply_text(reply_token, ask_ai(f"แปลข้อความนี้ ตอบแค่คำแปลเท่านั้น:\n{raw_text}"))
         return
 
     # ── Notes ──
     if normalized in NOTE_COMMANDS:
-        reply_text(reply_token, "ได้เลยครับ พิมพ์บันทึกที่ต้องการได้เลย\nเช่น: 'บันทึก: ประชุมวันพรุ่งนี้ 10 โมง'")
+        reply_text(reply_token, "พิมพ์ 'บันทึก: ข้อความ' เพื่อบันทึกครับ")
         return
-
-    if normalized.startswith("บันทึก:") or normalized.startswith("note:") or normalized.startswith("จดบันทึก:"):
+    if re.match(r"^(บันทึก|จดบันทึก|note)\s*:", normalized):
         content = raw_text.split(":", 1)[-1].strip()
         if content:
             save_note(session_key, content)
             reply_text(reply_token, f"บันทึกแล้วครับ ✅\n📝 {content}")
-        else:
-            reply_text(reply_token, "กรุณาพิมพ์ข้อความหลัง 'บันทึก:' ครับ")
         return
-
     if normalized in NOTE_LIST_COMMANDS:
         reply_text(reply_token, get_notes(session_key))
         return
-
     if normalized in NOTE_CLEAR_COMMANDS:
         clear_notes(session_key)
         reply_text(reply_token, "ลบบันทึกทั้งหมดแล้วครับ 🗑")
         return
 
-    # ── Waiting for images state ──
+    # ── Finance ──
+    if normalized in INCOME_COMMANDS:
+        reply_text(reply_token, "พิมพ์ 'รายรับ: จำนวน หมวดหมู่' ครับ\nเช่น 'รายรับ: 5000 เงินเดือน'")
+        return
+    if re.match(r"^รายรับ\s*:", normalized):
+        _handle_finance(reply_token, user_id, raw_text, "income")
+        return
+
+    if normalized in EXPENSE_COMMANDS:
+        reply_text(reply_token, "พิมพ์ 'รายจ่าย: จำนวน หมวดหมู่' ครับ\nเช่น 'รายจ่าย: 250 ค่าน้ำ'")
+        return
+    if re.match(r"^(รายจ่าย|ค่า\w+)\s*[\d:]", normalized):
+        _handle_finance(reply_token, user_id, raw_text, "expense")
+        return
+
+    if normalized in SUMMARY_COMMANDS:
+        now = datetime.now()
+        s   = get_monthly_summary(user_id, now.year, now.month)
+        reply_text(reply_token,
+            f"📊 สรุปการเงินเดือนนี้\n"
+            f"💚 รายรับ:  {s['income']:,.2f} บาท\n"
+            f"❤️ รายจ่าย: {s['expense']:,.2f} บาท\n"
+            f"💰 คงเหลือ:  {s['balance']:,.2f} บาท"
+        )
+        return
+
+    if normalized in RECENT_COMMANDS:
+        rows = get_recent_transactions(user_id)
+        if not rows:
+            reply_text(reply_token, "ยังไม่มีรายการครับ")
+            return
+        lines = ["📋 รายการล่าสุด\n"]
+        for r in rows:
+            icon = "💚" if r["type"] == "income" else "❤️"
+            lines.append(f"{icon} {r['category'] or '-'}  {r['amount']:,.2f} บาท  ({r['date']})")
+        reply_text(reply_token, "\n".join(lines))
+        return
+
+    # ── Events ──
+    if normalized in EVENT_COMMANDS:
+        reply_text(reply_token,
+            "พิมพ์นัดหมายแบบนี้ครับ\n'นัด: ชื่อ วันที่ เวลา'\nเช่น 'นัด: ประชุม 2026-07-15 09:00'")
+        return
+    if re.match(r"^นัด\s*:", normalized):
+        _handle_event(reply_token, user_id, raw_text)
+        return
+    if normalized in EVENT_LIST_COMMANDS:
+        _show_events(reply_token, user_id)
+        return
+
+    # ── Waiting states ──
     if state == "waiting_for_images":
         if normalized in DONE_COMMANDS:
             images = session.get("images", [])
             if not images:
-                reply_text(reply_token, "ยังไม่มีรูปครับ กรุณาส่งรูปก่อน แล้วค่อยพิมพ์ 'เสร็จแล้ว'")
+                reply_text(reply_token, "ยังไม่มีรูปครับ ส่งรูปก่อน แล้วพิมพ์ 'เสร็จแล้ว'")
                 return
             set_waiting_for_filename(session_key)
-            reply_text(reply_token, "รับรูปครบแล้วครับ\nกรุณาตั้งชื่อไฟล์ PDF ได้เลย เช่น ใบเสร็จ-มิถุนายน")
+            reply_text(reply_token, "ครบแล้วครับ ตั้งชื่อไฟล์ได้เลย เช่น ใบเสร็จ-มิถุนายน")
             return
-        reply_text(reply_token, waiting_for_images_message(mode))
+        reply_text(reply_token, waiting_msg(mode))
         return
 
-    # ── Waiting for filename state ──
     if state == "waiting_for_filename":
         safe_name = sanitize_filename(raw_text)
         if not safe_name:
-            reply_text(reply_token, "ชื่อไฟล์ยังใช้ไม่ได้ครับ กรุณาตั้งชื่อใหม่")
+            reply_text(reply_token, "ชื่อไฟล์ใช้ไม่ได้ครับ ลองใหม่")
             return
-
         images = session.get("images", [])
         if not images:
             clear_session(session_key)
-            reply_text(reply_token, "ไม่พบรูปครับ กรุณาเริ่มใหม่")
+            reply_text(reply_token, "ไม่พบรูปครับ เริ่มใหม่ได้เลย")
             return
-
         pdf_filename = f"{safe_name}-{uuid.uuid4().hex[:8]}.pdf"
         output_path  = GENERATED_DIR / pdf_filename
-
         try:
             build_pdf_from_images(images, str(output_path))
-            file_url       = build_file_url(request, pdf_filename)
-            result_message = build_success_message(mode, safe_name, file_url, images)
+            file_url = build_file_url(request, pdf_filename)
+            msg      = build_success_message(mode, safe_name, file_url, images, user_id)
             clear_session(session_key)
             cleanup_images(images)
-            reply_text(reply_token, result_message)
+            reply_text(reply_token, msg)
         except Exception as exc:
-            reply_text(reply_token, f"เกิดปัญหาระหว่างสร้าง PDF ครับ: {exc}")
+            reply_text(reply_token, f"เกิดปัญหาสร้าง PDF ครับ: {exc}")
         return
 
-    # ── Default: AI chat ──
-    ai_reply = ask_ai(raw_text)
-    reply_text(reply_token, ai_reply)
+    # ── Default AI ──
+    reply_text(reply_token, ask_ai(raw_text))
 
 
-# ── Image handler ─────────────────────────────────────────────────────────────
-def handle_image_message(
-    reply_token: str, session_key: str, message_id: str, request: Request
-) -> None:
+# ── Image ─────────────────────────────────────────────────────────────────────
+def handle_image_message(reply_token, session_key, message_id, request):
     session = get_session(session_key)
     state   = session.get("state", "idle")
     mode    = session.get("mode", "pdf")
 
+    # วิเคราะห์รูปด้วย AI ถ้าไม่ได้อยู่ใน flow
     if state != "waiting_for_images":
-        reply_text(reply_token,
-            "หากต้องการทำ PDF พิมพ์ 'ทำ PDF' ก่อนครับ\n"
-            "พิมพ์ 'เมนู' เพื่อดูคำสั่งทั้งหมด")
+        content, content_type = download_line_message_content(message_id)
+        ext      = guess_extension(content_type)
+        tmp_path = UPLOAD_DIR / f"tmp_{uuid.uuid4().hex}{ext}"
+        tmp_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path.write_bytes(content)
+
+        try:
+            ocr_text = extract_text_from_images([str(tmp_path)])
+            if ocr_text:
+                analysis = ask_ai(
+                    f"วิเคราะห์ข้อความจากรูปนี้ให้ครับ สรุปให้กระชับ:\n{ocr_text[:3000]}"
+                )
+                reply_text(reply_token, f"🔍 วิเคราะห์รูป:\n{analysis}")
+            else:
+                reply_text(reply_token,
+                    "รับรูปแล้วครับ ถ้าต้องการทำ PDF พิมพ์ 'ทำ PDF'\n"
+                    "ถ้าต้องการอ่านบิล/ใบเสร็จ พิมพ์ 'สรุปใบเสร็จ'\n"
+                    "ถ้าต้องการบันทึกสลิป พิมพ์ 'บันทึกสลิป'"
+                )
+        except Exception:
+            reply_text(reply_token,
+                "รับรูปแล้วครับ พิมพ์ 'เมนู' เพื่อดูว่าทำอะไรกับรูปได้บ้าง")
+        finally:
+            tmp_path.unlink(missing_ok=True)
         return
 
     content, content_type = download_line_message_content(message_id)
     ext      = guess_extension(content_type)
     user_dir = UPLOAD_DIR / session_key.replace(":", "_")
     user_dir.mkdir(parents=True, exist_ok=True)
-
     image_path = user_dir / f"{uuid.uuid4().hex}{ext}"
     image_path.write_bytes(content)
 
-    # resize mode — resize image immediately
     if mode == "resize":
         try:
             from PIL import Image as PILImage
@@ -261,80 +321,118 @@ def handle_image_message(
 
     updated = add_image(session_key, str(image_path))
     count   = len(updated.get("images", []))
-    reply_text(reply_token, image_received_message(mode, count))
+    reply_text(reply_token, image_received_msg(mode, count))
+
+
+# ── Finance helpers ───────────────────────────────────────────────────────────
+def _handle_finance(reply_token, user_id, raw_text, type_):
+    parts    = raw_text.split(":", 1)[-1].strip().split(None, 1)
+    try:
+        amount   = float(parts[0].replace(",", ""))
+        category = parts[1] if len(parts) > 1 else ("รายรับ" if type_ == "income" else "รายจ่าย")
+        add_transaction(user_id, type_, amount, category)
+        icon = "💚" if type_ == "income" else "❤️"
+        reply_text(reply_token, f"{icon} บันทึกแล้วครับ\n{category}: {amount:,.2f} บาท")
+    except (ValueError, IndexError):
+        reply_text(reply_token, "รูปแบบไม่ถูกต้องครับ เช่น 'รายจ่าย: 250 ค่าน้ำ'")
+
+
+def _handle_event(reply_token, user_id, raw_text):
+    content = raw_text.split(":", 1)[-1].strip()
+    parts   = content.split()
+    if len(parts) < 2:
+        reply_text(reply_token, "รูปแบบ: 'นัด: ชื่อ วันที่ เวลา'\nเช่น 'นัด: ประชุม 2026-07-15 09:00'")
+        return
+    title      = parts[0]
+    event_date = parts[1] if len(parts) > 1 else datetime.now().strftime("%Y-%m-%d")
+    event_time = parts[2] if len(parts) > 2 else ""
+    add_event(user_id, title, event_date, event_time)
+    reply_text(reply_token,
+        f"📅 บันทึกนัดหมายแล้วครับ\n"
+        f"📌 {title}\n"
+        f"🗓 {event_date} {event_time}\n"
+        f"🔔 จะแจ้งเตือนตรงเวลาครับ"
+    )
+
+
+def _show_events(reply_token, user_id):
+    events = get_upcoming_events(user_id)
+    if not events:
+        reply_text(reply_token, "ยังไม่มีนัดหมายครับ พิมพ์ 'นัด: ชื่อ วันที่ เวลา' เพื่อเพิ่ม")
+        return
+    lines = ["📅 นัดหมายที่กำลังจะมาถึง\n"]
+    for e in events:
+        lines.append(f"📌 {e['title']}  {e['event_date']} {e['event_time'] or ''}")
+    reply_text(reply_token, "\n".join(lines))
 
 
 # ── Flow helpers ──────────────────────────────────────────────────────────────
-def restart_flow(reply_token: str, session_key: str, mode: str) -> None:
+def restart_flow(reply_token, session_key, mode):
     old = clear_session(session_key)
     cleanup_images(old.get("images", []))
     start_pdf_flow(session_key, mode=mode)
-    reply_text(reply_token, start_flow_message(mode))
+    reply_text(reply_token, start_flow_msg(mode))
 
 
-def start_flow_message(mode: str) -> str:
+def start_flow_msg(mode):
     msgs = {
-        "ocr_summary_pdf": (
-            "โหมดอ่านบิล/ใบเสร็จ สรุปข้อมูล แล้วสร้าง PDF ครับ\n"
-            "ส่งรูปมาได้เลย แล้วพิมพ์ 'เสร็จแล้ว' เมื่อครบ\nพิมพ์ 'ยกเลิก' เพื่อยกเลิก"
-        ),
-        "resize": (
-            "โหมดปรับขนาดรูป ครับ\n"
-            "ส่งรูปมาได้เลย แล้วพิมพ์ 'เสร็จแล้ว' เมื่อครบ\nพิมพ์ 'ยกเลิก' เพื่อยกเลิก"
-        ),
+        "ocr_summary_pdf": "โหมดอ่านบิล/ใบเสร็จ สรุป แล้วสร้าง PDF\nส่งรูปมาได้เลย แล้วพิมพ์ 'เสร็จแล้ว'",
+        "slip":            "โหมดบันทึกสลิป\nส่งรูปสลิปมาได้เลย แล้วพิมพ์ 'เสร็จแล้ว'",
+        "resize":          "โหมดปรับขนาดรูป\nส่งรูปมาได้เลย แล้วพิมพ์ 'เสร็จแล้ว'",
     }
-    return msgs.get(mode,
-        "ได้เลยครับ ส่งรูปที่ต้องการรวมเป็น PDF มาได้เลย\n"
-        "แล้วพิมพ์ 'เสร็จแล้ว' เมื่อครบ\nพิมพ์ 'ยกเลิก' เพื่อยกเลิก"
-    )
+    return msgs.get(mode, "ส่งรูปมาได้เลยครับ แล้วพิมพ์ 'เสร็จแล้ว' เมื่อครบ")
 
 
-def waiting_for_images_message(mode: str) -> str:
-    if mode == "ocr_summary_pdf":
-        return "กำลังรอรูปอยู่ครับ ส่งเพิ่มได้ หรือพิมพ์ 'เสร็จแล้ว'"
-    if mode == "resize":
-        return "กำลังรอรูปอยู่ครับ ส่งเพิ่มได้ หรือพิมพ์ 'เสร็จแล้ว'"
+def waiting_msg(mode):
     return "กำลังรอรูปอยู่ครับ ส่งเพิ่มได้ หรือพิมพ์ 'เสร็จแล้ว'"
 
 
-def image_received_message(mode: str, count: int) -> str:
+def image_received_msg(mode, count):
     suffix = {
-        "ocr_summary_pdf": "ส่งเพิ่มได้ หรือพิมพ์ 'เสร็จแล้ว' ให้ผมอ่าน สรุป และสร้าง PDF",
-        "resize": "ส่งเพิ่มได้ หรือพิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF จากรูปที่ปรับขนาดแล้ว",
-    }.get(mode, "ส่งเพิ่มได้ หรือพิมพ์ 'เสร็จแล้ว' เพื่อสร้าง PDF")
+        "ocr_summary_pdf": "พิมพ์ 'เสร็จแล้ว' ให้ผมสรุป + สร้าง PDF",
+        "slip":            "พิมพ์ 'เสร็จแล้ว' ให้ผมอ่านสลิป + บันทึก",
+        "resize":          "พิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF",
+    }.get(mode, "พิมพ์ 'เสร็จแล้ว' เพื่อสร้าง PDF")
     return f"รับรูปแล้ว {count} รูปครับ\n{suffix}"
 
 
-def build_success_message(mode: str, safe_name: str, file_url: str, images: list[str]) -> str:
-    base = f"✅ สร้าง PDF เรียบร้อยแล้วครับ\nชื่อไฟล์: {safe_name}.pdf\nดาวน์โหลด:\n{file_url}"
+def build_success_message(mode, safe_name, file_url, images, user_id):
+    base = f"✅ สร้าง PDF แล้วครับ\nชื่อ: {safe_name}.pdf\n🔗 {file_url}"
 
-    if mode != "ocr_summary_pdf":
-        return base
+    if mode == "slip":
+        try:
+            ocr_text = extract_text_from_images(images)
+            slip     = parse_slip(ocr_text)
+            save_slip(user_id,
+                slip["amount"], slip["bank"],
+                slip["ref"], slip["datetime"], ocr_text)
+            return (
+                f"🧾 อ่านสลิปแล้วครับ\n"
+                f"💰 ยอด: {slip['amount']:,.2f} บาท\n" if slip["amount"] else "" +
+                f"🏦 ธนาคาร: {slip['bank']}\n"
+                f"🔖 Ref: {slip['ref']}\n"
+                f"🕐 วันที่: {slip['datetime']}\n\n{base}"
+            )
+        except Exception:
+            return base
 
-    try:
-        ocr_text = extract_text_from_images(images)
-    except OCRUnavailableError as exc:
-        return f"{base}\n\nหมายเหตุ: ยังสรุปข้อความไม่ได้ เพราะ {exc}"
+    if mode == "ocr_summary_pdf":
+        try:
+            ocr_text = extract_text_from_images(images)
+        except OCRUnavailableError as exc:
+            return f"{base}\n\nหมายเหตุ: สรุปไม่ได้ เพราะ {exc}"
+        if not ocr_text:
+            return f"{base}\n\nหมายเหตุ: อ่านข้อความไม่ได้ครับ"
+        summary = ask_ai(
+            f"สรุปเอกสารนี้เป็นภาษาไทย กระชับ อ่านง่าย:\n{ocr_text[:12000]}"
+        ).strip()
+        return f"📋 สรุป:\n{summary}\n\n{base}"
 
-    if not ocr_text:
-        return f"{base}\n\nหมายเหตุ: ไม่สามารถอ่านข้อความจากรูปได้ชัดเจนพอครับ"
-
-    summary = summarize_document_text(ocr_text)
-    return f"📋 สรุปข้อมูล:\n{summary}\n\n{base}"
-
-
-def summarize_document_text(ocr_text: str) -> str:
-    prompt = (
-        "อ่านข้อความ OCR ต่อไปนี้ แล้วสรุปเป็นภาษาไทยแบบกระชับ อ่านง่าย\n"
-        "ถ้าเป็นใบเสร็จ/บิล ให้สรุป: ร้านค้า, วันที่, ยอดรวม, รายการสำคัญ\n"
-        "ถ้าเป็นเอกสารทั่วไป ให้สรุปใจความสำคัญ\n\n"
-        f"OCR TEXT:\n{ocr_text[:12000]}"
-    )
-    return ask_ai(prompt).strip()
+    return base
 
 
 # ── Notes ─────────────────────────────────────────────────────────────────────
-def _load_notes() -> dict:
+def _load_notes():
     if not NOTES_FILE.exists():
         return {}
     try:
@@ -342,104 +440,103 @@ def _load_notes() -> dict:
     except Exception:
         return {}
 
-def _save_notes(data: dict) -> None:
+def _save_notes(data):
     NOTES_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
-def save_note(session_key: str, content: str) -> None:
+def save_note(session_key, content):
     data = _load_notes()
-    if session_key not in data:
-        data[session_key] = []
-    data[session_key].append({
+    data.setdefault(session_key, []).append({
         "content": content,
         "time": datetime.now().strftime("%d/%m/%Y %H:%M")
     })
     _save_notes(data)
 
-def get_notes(session_key: str) -> str:
-    data  = _load_notes()
-    notes = data.get(session_key, [])
+def get_notes(session_key):
+    notes = _load_notes().get(session_key, [])
     if not notes:
         return "ยังไม่มีบันทึกครับ พิมพ์ 'บันทึก: ข้อความ' เพื่อบันทึก"
-    lines = [f"📝 บันทึกของคุณ ({len(notes)} รายการ)\n"]
+    lines = [f"📝 บันทึก {len(notes)} รายการ\n"]
     for i, n in enumerate(notes[-20:], 1):
         lines.append(f"{i}. {n['content']}\n   🕐 {n['time']}")
     return "\n".join(lines)
 
-def clear_notes(session_key: str) -> None:
+def clear_notes(session_key):
     data = _load_notes()
     data.pop(session_key, None)
     _save_notes(data)
 
 
 # ── Messages ──────────────────────────────────────────────────────────────────
-def build_welcome_message() -> str:
-    return (
-        f"สวัสดีครับ ผมคือ {BOT_NAME} 🤖\n\n"
-        "พิมพ์ 'เมนู' เพื่อดูสิ่งที่ผมช่วยได้ครับ"
-    )
+def build_welcome_message():
+    return f"สวัสดีครับ ผมคือ {BOT_NAME} 🤖\nพิมพ์ 'เมนู' เพื่อดูสิ่งที่ผมช่วยได้ครับ"
 
-def build_help_message() -> str:
+def build_help_message():
     return (
         f"🤖 {BOT_NAME} ช่วยได้ดังนี้\n\n"
-        "📄 PDF\n"
-        "  • 'ทำ PDF' — รวมรูปเป็น PDF\n"
-        "  • 'สรุปใบเสร็จ' — OCR + สรุป + PDF\n"
-        "  • 'ปรับขนาดรูป' — ปรับรูป + PDF\n\n"
-        "🌐 แปลภาษา\n"
-        "  • 'แปลเป็นอังกฤษ: ข้อความ'\n"
-        "  • 'แปลเป็นไทย: text'\n\n"
+        "📄 PDF & เอกสาร\n"
+        "  • ทำ PDF\n"
+        "  • สรุปใบเสร็จ / อ่านบิล\n"
+        "  • บันทึกสลิป\n"
+        "  • ปรับขนาดรูป\n\n"
+        "💰 การเงิน\n"
+        "  • รายรับ: จำนวน หมวดหมู่\n"
+        "  • รายจ่าย: จำนวน หมวดหมู่\n"
+        "  • สรุปเดือนนี้\n"
+        "  • รายการล่าสุด\n\n"
+        "📅 นัดหมาย\n"
+        "  • นัด: ชื่อ วันที่ เวลา\n"
+        "  • ดูนัดหมาย\n\n"
         "📝 บันทึก\n"
-        "  • 'บันทึก: ข้อความ' — บันทึก\n"
-        "  • 'ดูบันทึก' — ดูรายการ\n"
-        "  • 'ลบบันทึก' — ลบทั้งหมด\n\n"
-        "💬 อื่นๆ\n"
-        "  • พิมพ์ถามอะไรก็ได้ ผม AI ครับ\n"
-        "  • 'ยกเลิก' — ยกเลิกงานปัจจุบัน"
+        "  • บันทึก: ข้อความ\n"
+        "  • ดูบันทึก / ลบบันทึก\n\n"
+        "🌐 อื่นๆ\n"
+        "  • แปลเป็นอังกฤษ: ข้อความ\n"
+        "  • ส่งรูป → วิเคราะห์อัตโนมัติ\n"
+        "  • ถามอะไรก็ได้ครับ 💬"
     )
 
 
 # ── Utils ─────────────────────────────────────────────────────────────────────
-def download_line_message_content(message_id: str) -> tuple[bytes, str]:
-    headers  = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
-    response = requests.get(
+def download_line_message_content(message_id):
+    r = requests.get(
         LINE_CONTENT_ENDPOINT.format(message_id=message_id),
-        headers=headers, timeout=30
+        headers={"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"},
+        timeout=30
     )
-    response.raise_for_status()
-    return response.content, response.headers.get("Content-Type", "application/octet-stream")
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "application/octet-stream")
 
-def reply_text(reply_token: str, text: str) -> None:
-    headers = {
-        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
-        "Content-Type": "application/json",
-    }
-    payload = {"replyToken": reply_token, "messages": [{"type": "text", "text": text[:5000]}]}
-    requests.post(LINE_REPLY_ENDPOINT, headers=headers, json=payload, timeout=30).raise_for_status()
+def reply_text(reply_token, text):
+    requests.post(
+        LINE_REPLY_ENDPOINT,
+        headers={"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}", "Content-Type": "application/json"},
+        json={"replyToken": reply_token, "messages": [{"type": "text", "text": text[:5000]}]},
+        timeout=30
+    ).raise_for_status()
 
-def build_file_url(request: Request, filename: str) -> str:
+def build_file_url(request, filename):
     if PUBLIC_BASE_URL:
         return f"{PUBLIC_BASE_URL}/files/{filename}"
     return str(request.base_url).rstrip("/") + f"/files/{filename}"
 
-def get_session_key(source: dict[str, Any]) -> str:
+def get_session_key(source):
     for key in ("userId", "groupId", "roomId"):
         val = source.get(key)
         if val:
             return f"{source.get('type','user')}:{val}"
     return f"unknown:{uuid.uuid4().hex}"
 
-def normalize_text(text: str) -> str:
+def normalize_text(text):
     return re.sub(r"\s+", " ", text.strip().lower())
 
-def sanitize_filename(name: str) -> str:
+def sanitize_filename(name):
     cleaned = re.sub(r'[\\/:*?"<>|]+', "", name).strip()
     return re.sub(r"\s+", " ", cleaned).rstrip(".")[:80]
 
-def guess_extension(content_type: str) -> str:
-    ext = mimetypes.guess_extension(content_type.split(";")[0].strip())
-    return ext or ".jpg"
+def guess_extension(content_type):
+    return mimetypes.guess_extension(content_type.split(";")[0].strip()) or ".jpg"
 
-def cleanup_images(image_paths: list[str]) -> None:
+def cleanup_images(image_paths):
     for p in image_paths:
         try:
             Path(p).unlink(missing_ok=True)
