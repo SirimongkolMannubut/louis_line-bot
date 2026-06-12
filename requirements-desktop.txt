@@ -1,0 +1,6 @@
+-r requirements.txt
+speechrecognition
+edge-tts
+pygame
+pyaudio
+customtkinter

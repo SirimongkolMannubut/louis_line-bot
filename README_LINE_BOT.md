@@ -40,8 +40,16 @@ OCR_LANG=tha+eng
 
 ## ติดตั้งแพ็กเกจ
 
+### สำหรับ LINE Bot / Railway
+
 ```bash
 pip install -r requirements.txt
+```
+
+### สำหรับแอปเดสก์ท็อปเดิม
+
+```bash
+pip install -r requirements-desktop.txt
 ```
 
 ## รันเซิร์ฟเวอร์
@@ -79,4 +87,6 @@ https://your-public-domain/webhook/line
 
 - โหมด OCR ใช้ `pytesseract` + โปรแกรม `Tesseract OCR` ที่ต้องติดตั้งในเครื่องหรือเซิร์ฟเวอร์เอง
 - ถ้าไม่มี Tesseract ระบบจะยังสร้าง PDF ได้ แต่จะสรุปข้อความจากภาพไม่ได้
+- สำหรับ Railway ให้ใช้ `requirements.txt` เท่านั้น เพราะไม่มี dependency ฝั่งเสียง/GUI เช่น `pyaudio`, `pygame`, `customtkinter`
+- โปรเจกต์นี้มี `Procfile` และ `nixpacks.toml` ให้แล้ว โดย `nixpacks.toml` จะช่วยติดตั้ง `tesseract` บน Railway สำหรับโหมด OCR
 - หากต้องการใช้งานจริง ควร deploy ไปยังเซิร์ฟเวอร์สาธารณะและตั้ง reverse proxy/HTTPS ให้เรียบร้อย
