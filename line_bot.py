@@ -143,7 +143,8 @@ RECENT_COMMANDS = {
 }
 EVENT_COMMANDS = {"นัดหมาย", "เพิ่มนัด", "ตั้งนัด", "event", "ปฏิทิน"}
 EVENT_LIST_COMMANDS = {"ดูนัดหมาย", "นัดหมายทั้งหมด", "ตารางงาน"}
-RESIZE_COMMANDS = {"ปรับขนาดรูป", "resize", "บีบรูป", "ลดขนาดรูป", "compress"}
+A4_COMMANDS = {"จัดรูปลง a4", "จัดรูป a4", "a4", "จัดรูปลงกระดาษ a4"}
+COMPRESS_COMMANDS = {"ย่อรูป", "บีบรูป", "ลดขนาดรูป", "compress", "ย่อขนาดรูป", "ย่อขนาดไฟล์รูป", "ลดขนาดไฟล์รูป"}
 VOICE_COMMANDS = {"สรุปเสียง", "แปลงเสียง", "voice", "อ่านเสียง"}
 KB_COMMANDS = {"knowledge base", "คลังความรู้", "อัปโหลดเอกสาร"}
 KB_LIST_COMMANDS = {"ดูเอกสาร", "รายการเอกสาร", "list kb"}
@@ -357,8 +358,11 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
     if normalized in SLIP_COMMANDS:
         restart_flow(reply_token, session_key, "slip")
         return
-    if normalized in RESIZE_COMMANDS:
+    if normalized in A4_COMMANDS:
         restart_flow(reply_token, session_key, "resize")
+        return
+    if normalized in COMPRESS_COMMANDS:
+        restart_flow(reply_token, session_key, "compress")
         return
 
     # ── Voice ──
@@ -757,6 +761,48 @@ def handle_image_message(reply_token, session_key, message_id, request):
     user_dir.mkdir(parents=True, exist_ok=True)
     image_path = user_dir / f"{uuid.uuid4().hex}{ext}"
     image_path.write_bytes(content)
+
+    if mode == "compress":
+        try:
+            from PIL import Image as PILImage
+            from PIL import ImageOps as PILOps
+            import io
+
+            img = PILImage.open(io.BytesIO(content))
+            img = PILOps.exif_transpose(img)
+            img.thumbnail((1280, 1280))
+
+            filename = f"compressed-{uuid.uuid4().hex}.jpg"
+            out_path = GENERATED_DIR / filename
+            img.save(out_path, "JPEG", optimize=True, quality=85)
+
+            file_url = build_file_url(request, filename)
+
+            requests.post(
+                LINE_REPLY_ENDPOINT,
+                headers={
+                    "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "replyToken": reply_token,
+                    "messages": [
+                        {
+                            "type": "image",
+                            "originalContentUrl": file_url,
+                            "previewImageUrl": file_url,
+                        },
+                        {
+                            "type": "text",
+                            "text": f"✅ ย่อขนาดรูปภาพเรียบร้อยแล้วครับ!\n🔗 {file_url}\n\nส่งรูปเพิ่มเติมเพื่อย่อต่อได้เลย หรือพิมพ์ 'เสร็จแล้ว' เพื่อเสร็จสิ้นครับ",
+                        },
+                    ],
+                },
+                timeout=30,
+            ).raise_for_status()
+        except Exception as e:
+            reply_text(reply_token, f"เกิดข้อผิดพลาดในการย่อรูปครับ: {e}")
+        return
 
     if mode == "resize":
         try:
@@ -1181,11 +1227,24 @@ def start_flow_msg(mode):
             "ผมจะอ่านยอดและรวมให้อัตโนมัติ\n\n"
             "เมื่อส่งครบพิมพ์ 'เสร็จแล้ว' เพื่อดูยอดรวม"
         ),
+        "pdf": (
+            "📄 แปลงรูปเป็น PDF\n\n"
+            "ส่งรูปถ่ายเอกสารหรือรูปทั่วไปมาได้เลยครับ\n"
+            "ผมจะรวบรวมและสร้างเป็นไฟล์ PDF ไฟล์เดียวให้ครับ\n\n"
+            "เมื่อส่งครบพิมพ์ 'เสร็จแล้ว' เพื่อตั้งชื่อไฟล์และดาวน์โหลด"
+        ),
         "resize": (
-            "🖼️ ย่อรูปใหญ่เป็น PDF\n\n"
-            "เหมาะสำหรับ: รูปที่ถ่ายจากมือถือไซส์ใหญ่ ผมจะย่อให้ได้สัดส่วน A4\n\n"
+            "📄 จัดรูปลง A4 (สร้าง PDF)\n\n"
+            "เหมาะสำหรับ: จัดรูปถ่ายเอกสารให้อยู่ในสัดส่วน A4 ของไฟล์ PDF (เช่น ยื่นเอกสารฝึกงาน หรือ กยศ.)\n\n"
             "ส่งรูปมาได้เลยครับ ส่งได้หลายรูป\n"
             "เมื่อครบพิมพ์ 'เสร็จแล้ว' แล้วตั้งชื่อไฟล์ PDF"
+        ),
+        "compress": (
+            "🖼️ ย่อขนาดไฟล์รูป (Compress Image)\n\n"
+            "เหมาะสำหรับ: ลดขนาดไฟล์รูป (ลด KB/MB) หรือปรับความกว้างสูงไม่เกิน 1280px\n"
+            "ผมจะส่งรูปที่ย่อขนาดแล้วกลับให้คุณทันทีแบบรูปภาพ\n\n"
+            "ส่งรูปที่ต้องการย่อขนาดไฟล์มาได้เลยครับ\n"
+            "เมื่อย่อครบหมดแล้ว พิมพ์ 'เสร็จแล้ว' เพื่อเสร็จงาน"
         ),
     }
     return msgs.get(mode, "📎 ส่งรูปมาได้เลยครับ\nเมื่อครบพิมพ์ 'เสร็จแล้ว'")
@@ -1193,19 +1252,23 @@ def start_flow_msg(mode):
 
 def waiting_msg(mode):
     msgs = {
-        "ocr_summary_pdf": "📎 ส่งรูปเพิ่มได้เลยครับ  หรือพิมพ์ 'เสร็จแล้ว' ให้ผมวิเคราะห์",
-        "slip": "📎 ส่งสลิปเพิ่มได้เลยครับ  หรือพิมพ์ 'เสร็จแล้ว' ให้ผมรวมยอด",
-        "multi_slip": "📎 ส่งสลิปเพิ่มได้เลยครับ  หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูยอดรวม",
-        "resize": "📎 ส่งรูปเพิ่มได้เลยครับ  หรือพิมพ์ 'เสร็จแล้ว' แล้วตั้งชื่อไฟล์ PDF",
+        "ocr_summary_pdf": "📎 ส่งรูปเพิ่มได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' ให้ผมวิเคราะห์",
+        "slip": "📎 ส่งสลิปเพิ่มได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' ให้ผมรวมยอด",
+        "multi_slip": "📎 ส่งสลิปเพิ่มได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูยอดรวม",
+        "pdf": "📎 ส่งรูปที่ต้องการรวมเป็น PDF เพิ่มได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' เพื่อสร้างไฟล์",
+        "resize": "📎 ส่งรูปเพิ่มได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' เพื่อแปลงลง A4 PDF",
+        "compress": "📎 ส่งรูปเพิ่มเพื่อย่อขนาดไฟล์ต่อได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' เพื่อเสร็จสิ้น",
     }
-    return msgs.get(mode, "📎 ส่งรูปเพิ่มได้เลยครับ  หรือพิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF")
+    return msgs.get(mode, "📎 ส่งรูปเพิ่มได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF")
 
 
 def image_received_msg(mode, count):
     suffix = {
         "ocr_summary_pdf": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' ให้ผมวิเคราะห์ + สรุป + สร้าง PDF ครับ",
         "slip": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' ให้ผมอ่านและบันทึกยอดครับ",
-        "resize": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF ครับ",
+        "pdf": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อรวบรวมเป็นไฟล์ PDF ครับ",
+        "resize": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อนำมาจัดหน้า A4 PDF ครับ",
+        "compress": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เมื่อย่อรูปครบตามที่ต้องการแล้วครับ",
     }.get(mode, "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF ครับ")
     return f"📥 รับรูปแล้ว {count} รูปครับ\n{suffix}"
 
@@ -1253,11 +1316,22 @@ def build_success_message(mode, safe_name, file_url, images, user_id):
 
     if mode == "resize":
         return (
-            f"✅ สร้าง PDF (ย่อรูปแล้ว) เรียบร้อยครับ\n"
+            f"✅ จัดรูปลงหน้า A4 (PDF) เรียบร้อยครับ\n"
             f"📄 {len(images)} รูป → ขนาด A4\n"
             f"ชื่อ: {safe_name}.pdf\n"
             f"🔗 {file_url}"
         )
+
+    if mode == "pdf":
+        return (
+            f"✅ รวมรูปภาพเป็นไฟล์ PDF เรียบร้อยครับ\n"
+            f"📄 {len(images)} รูป\n"
+            f"ชื่อ: {safe_name}.pdf\n"
+            f"🔗 {file_url}"
+        )
+
+    if mode == "compress":
+        return "✅ เสร็จสิ้นการย่อขนาดไฟล์รูปภาพเรียบร้อยแล้วครับ 💬"
 
     return base
 
@@ -1337,8 +1411,11 @@ def build_help_message():
         "  • พิมพ์ 'ข้อมูลของฉัน' เพื่อดูประวัติ\n"
         "  • พิมพ์ 'เปลี่ยนชื่อเป็น [ชื่อ]' / 'เปลี่ยนอายุเป็น [อายุ]'\n"
         "  • พิมพ์ 'ล้างข้อมูลของฉัน' เพื่อลบประวัติ\n\n"
-        "🖼️ จัดการรูปภาพ & เสียง\n"
-        "  • พิมพ์ 'ปรับขนาดรูป' → ย่อรูปใหญ่ลง PDF A4\n"
+        "🖼️ จัดการรูปภาพ\n"
+        "  • พิมพ์ 'ย่อรูป' → ลดขนาดไฟล์รูป (KB/MB)\n"
+        "  • พิมพ์ 'จัดรูปลง A4' → จัดรูปถ่ายใส่ PDF ขนาด A4\n"
+        "  • พิมพ์ 'ทำ PDF' → รวมรูปทั่วไปเป็น PDF\n\n"
+        "🌐 อื่น ๆ\n"
         "  • พิมพ์ 'แปลเป็นอังกฤษ: [ข้อความ]'\n"
         "  • ส่งเสียงมา → แปลงเป็นข้อความแชท\n"
         "════════════════════\n"
