@@ -63,18 +63,67 @@ def _call_vision(image_path: str, prompt: str, max_tokens: int = 1024) -> str:
 
 def read_receipt(image_path: str) -> str:
     """อ่านและสรุปใบเสร็จ/บิล — คืนสรุปเป็นภาษาไทย"""
-    prompt = (
-        "คุณเป็นผู้ช่วยอ่านเอกสารการเงิน\n"
-        "อ่านใบเสร็จ/บิลนี้แล้วสรุปเป็นภาษาไทยให้ครบ:\n"
-        "1. ร้านค้า / หน่วยงาน\n"
-        "2. วันที่\n"
-        "3. รายการสินค้า/บริการ (ชื่อ จำนวน ราคา)\n"
-        "4. ยอดรวม\n"
-        "5. ข้อมูลอื่นที่สำคัญ (เช่น เลข Tax ID, เลขที่ใบเสร็จ)\n\n"
-        "ถ้าอ่านข้อมูลใดไม่ได้ให้บอกว่า 'ไม่ชัดเจน'\n"
-        "ตอบเป็นภาษาไทย กระชับ อ่านง่าย"
-    )
-    return _call_vision(image_path, prompt, max_tokens=800)
+    import json
+    from core.ocr_service import has_tesseract, extract_text_from_image
+    from core.brain import MODEL
+
+    # 1. อ่านข้อความจากภาพ (OCR)
+    ocr_text = ""
+    if has_tesseract():
+        try:
+            ocr_text = extract_text_from_image(image_path)
+        except Exception:
+            ocr_text = ""
+
+    # Fallback to Vision LLM for OCR if Tesseract is not available or failed
+    if not ocr_text:
+        ocr_prompt = (
+            "ถอดความหรืออ่านข้อความทั้งหมดที่ปรากฏในรูปภาพนี้อย่างละเอียดคำต่อคำ (OCR) "
+            "โดยไม่ต้องสรุปหรือตีความใดๆ หากภาพไม่ชัดเจนหรือไม่มีข้อความภาษาไทย/อังกฤษที่อ่านออกได้ ให้ตอบเพียง 'UNREADABLE'"
+        )
+        try:
+            ocr_text = _call_vision(image_path, ocr_prompt, max_tokens=1024)
+        except Exception:
+            ocr_text = ""
+
+    if not ocr_text or "UNREADABLE" in ocr_text.upper() or len(ocr_text.strip()) < 10:
+        return "ไม่สามารถอ่านได้ชัดเจน"
+
+    # 2-4. ส่งข้อมูลเข้า LLM เพื่อดึงข้อมูลสำคัญและสรุปเป็นภาษาไทย
+    prompt = f"""คุณคือ AI ผู้ช่วยวิเคราะห์ข้อมูลใบเสร็จจากข้อความ OCR
+นี่คือข้อความที่สแกนได้จากรูปภาพใบเสร็จ:
+\"\"\"
+{ocr_text}
+\"\"\"
+
+กรุณาดำเนินการดังนี้:
+1. ตรวจสอบว่าข้อความ OCR ดังกล่าวมีข้อมูลใบเสร็จที่ชัดเจนหรือไม่ หากข้อความไม่ชัดเจน อ่านไม่รู้เรื่อง เป็นตัวอักษรขยะ หรือไม่มีข้อมูลชื่อร้าน/ยอดรวมที่อ่านได้ชัดเจน ห้ามเดาข้อมูลเด็ดขาด ให้ตอบกลับเพียงคำว่า "ไม่สามารถอ่านได้ชัดเจน" เท่านั้น ห้ามมีข้อความอื่นเพิ่มเติม
+
+2. หากข้อมูลชัดเจนเพียงพอ ให้ดึงข้อมูลสำคัญและแสดงผลลัพธ์ในรูปแบบภาษาไทยตามตัวอย่างนี้เป๊ะๆ:
+
+ร้าน: [ชื่อร้านค้า]
+
+รายการ:
+- [รายการสินค้า 1] [ราคา] บาท
+- [รายการสินค้า 2] [ราคา] บาท
+
+รวม: [ยอดรวม] บาท
+
+หมวดหมู่:
+[วิเคราะห์หมวดหมู่ของใบเสร็จ เช่น อาหารและเครื่องดื่ม, ของใช้ในบ้าน, เดินทาง, อื่นๆ]
+
+คำเตือน: ห้ามเดาข้อมูลหรือเติมแต่งข้อมูลที่ไม่มีในข้อความ OCR ถ้าส่วนใดไม่ชัดเจนจริงๆ ให้เว้นว่างหรือพิมพ์ว่า "ไม่สามารถอ่านได้ชัดเจน" ในส่วนนั้นๆ หรือหากทั้งใบไม่ชัดเจนให้ตอบ "ไม่สามารถอ่านได้ชัดเจน"
+"""
+    try:
+        resp = _client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=600,
+        )
+        summary = resp.choices[0].message.content.strip()
+        return summary
+    except Exception:
+        return "ไม่สามารถอ่านได้ชัดเจน"
 
 
 def read_slip(image_path: str) -> dict:
