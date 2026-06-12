@@ -4,7 +4,8 @@ from groq import Groq
 
 load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+api_key = os.getenv("GROQ_API_KEY") or ""
+client = Groq(api_key=api_key) if api_key else None
 MODEL  = "llama-3.3-70b-versatile"
 
 SYSTEM_PROMPT = (
@@ -13,6 +14,8 @@ SYSTEM_PROMPT = (
 )
 
 def ask_ai(message: str) -> str:
+    if not client:
+        return "[Error] GROQ_API_KEY not set"
     try:
         res = client.chat.completions.create(
             model=MODEL,
