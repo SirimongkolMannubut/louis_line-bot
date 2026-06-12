@@ -45,6 +45,7 @@ from core.pdf_service import build_pdf_from_images
 from core.scheduler import start_scheduler
 from core.slip_parser import parse_slip
 from core.user_profile import extract_and_save_profile, get_profile, save_profile
+from core.vision_service import analyze_image, read_receipt, read_slip
 from core.voice_service import transcribe_and_summarize
 
 load_dotenv()
@@ -506,18 +507,15 @@ def handle_image_message(reply_token, session_key, message_id, request):
                 )
             return
 
-        # Auto-detect เอกสาร/รูปทั่วไป
-        if ocr_text:
-            analysis = ask_ai(
-                f"วิเคราะห์ข้อความจากรูปนี้ให้ครับ สรุปให้กระชับ:\n{ocr_text[:3000]}"
-            )
+        # ใช้ Vision LLM วิเคราะห์รูปโดยตรง (แม่นยำกว่า Tesseract + AI)
+        try:
+            analysis = analyze_image(str(tmp_path))
             reply_text(reply_token, f"🔍 วิเคราะห์รูป:\n{analysis}")
-        else:
+        except Exception:
             reply_text(
                 reply_token,
                 "📸 รับรูปแล้วครับ\n\n"
-                "🧾 ถ้าเป็นสลิปโอนเงิน\n"
-                "   พิมพ์ 'รวมสลิป' แล้วส่งรูปสลิปมาใหม่ครับ\n\n"
+                "🧾 ถ้าเป็นสลิปโอนเงิน → 'รวมสลิป'\n"
                 "📄 ถ้าต้องการรวมรูปเป็น PDF → 'ทำ PDF'\n"
                 "🔍 ถ้าต้องการอ่านเอกสาร → 'สรุปใบเสร็จ'",
             )
@@ -536,8 +534,8 @@ def handle_image_message(reply_token, session_key, message_id, request):
             from PIL import ImageOps as PILOps
 
             img = PILImage.open(image_path)
-            img = PILOps.exif_transpose(img)  # แก้การหมุนของรูปจากมือถือ
-            img.thumbnail((1240, 1754))  # A4 ที่ 150dpi
+            img = PILOps.exif_transpose(img)
+            img.thumbnail((1240, 1754))
             img.save(image_path, optimize=True, quality=85)
         except Exception:
             pass
@@ -545,11 +543,10 @@ def handle_image_message(reply_token, session_key, message_id, request):
     updated = add_image(session_key, str(image_path))
     count = len(updated.get("images", []))
 
-    # โหมด multi_slip: OCR สลิปทันทีและแสดงยอดสะสม
+    # ── โหมด multi_slip: ใช้ Vision LLM อ่านสลิปทันที ──
     if mode == "multi_slip":
         try:
-            ocr_text = extract_text_from_images([str(image_path)])
-            slip = parse_slip(ocr_text) if ocr_text else {}
+            slip = read_slip(str(image_path))  # Vision LLM อ่านสลิป
             amount = slip.get("amount") or 0.0
         except Exception:
             amount = 0.0
@@ -567,7 +564,7 @@ def handle_image_message(reply_token, session_key, message_id, request):
         else:
             reply_text(
                 reply_token,
-                f"📥 รับสลิปที่ {n} แล้วครับ (อ่านยอดไม่ชัด)\n"
+                f"📥 รับสลิปที่ {n} แล้วครับ (อ่านยอดไม่ได้)\n"
                 f"💰 ยอดสะสมที่อ่านได้: {total:,.2f} บาท\n\n"
                 f"ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว'",
             )
@@ -884,20 +881,17 @@ def build_success_message(mode, safe_name, file_url, images, user_id):
             return base
 
     if mode == "ocr_summary_pdf":
-        try:
-            ocr_text = extract_text_from_images(images)
-        except OCRUnavailableError as exc:
-            return f"{base}\n\nหมายเหตุ: สรุปไม่ได้ เพราะ {exc}"
-        if not ocr_text:
-            return f"{base}\n\nหมายเหตุ: อ่านข้อความไม่ได้ครับ"
-        summary = ask_ai(
-            "อ่านข้อความ OCR ต่อไปนี้แล้วสรุปเป็นภาษาไทย กระชับ อ่านง่าย\n"
-            "ถ้าเป็นใบเสร็จหรือบิล ให้สรุป: ร้านค้า/หน่วยงาน วันที่ รายการสำคัญ ยอดรวม\n"
-            "ถ้าเป็นเอกสารทั่วไป ให้สรุปใจความเป็นหัวข้อย่อย\n"
-            "ถ้าข้อมูลไม่ชัดเจน ให้ระบุตามจริงว่าอ่านได้ไม่ครบ\n\n"
-            f"OCR TEXT:\n{ocr_text[:12000]}"
-        ).strip()
-        return f"🧠 วิเคราะห์เอกสารแล้วครับ\n{'─' * 25}\n{summary}\n\n{base}"
+        # ใช้ Vision LLM อ่านใบเสร็จโดยตรง (ไม่ต้องผ่าน OCR อีกต่อ)
+        summaries: list[str] = []
+        for img_path in images:
+            try:
+                s = read_receipt(img_path)  # Vision LLM อ่านใบเสร็จโดยตรง
+                summaries.append(s)
+            except Exception as e:
+                summaries.append(f"(อ่านไม่ได้: {e})")
+        summary = "\n\n".join(summaries) if summaries else "ไม่สามารถอ่านเอกสารได้ครับ"
+        sep = "─" * 25
+        return f"🧠 วิเคราะห์เอกสารแล้วครับ\n{sep}\n{summary}\n\n{base}"
 
     if mode == "resize":
         return (
