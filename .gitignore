@@ -1,0 +1,8 @@
+.env
+venv/
+__pycache__/
+*.pyc
+memory/conversations.json
+memory/line_sessions.json
+storage/uploads/
+storage/generated/

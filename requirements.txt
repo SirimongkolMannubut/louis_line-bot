@@ -1,0 +1,12 @@
+groq
+python-dotenv
+speechrecognition
+edge-tts
+pygame
+pyaudio
+customtkinter
+fastapi
+uvicorn
+requests
+pillow
+pytesseract
