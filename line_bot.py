@@ -59,6 +59,8 @@ from core.user_profile import (
     is_asking_own_profile,
     save_profile,
     clear_profile,
+    is_asking_own_age,
+    is_asking_own_job,
 )
 from core.vision_service import analyze_image, read_receipt, read_slip
 from core.voice_service import transcribe_and_summarize
@@ -259,9 +261,27 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
     if is_asking_own_name(normalized):
         profile = get_profile(line_user_id)
         if profile.get("name"):
-            reply_text(reply_token, f"คุณชื่อคุณ{profile['name']}ครับ 😊")
+            reply_text(reply_token, f"คุณชื่อ {profile['name']} ครับ 😊")
         else:
-            reply_text(reply_token, "ยังไม่รู้ชื่อคุณเลยครับ\nบอกได้เลยครับ เช่น 'ผมชื่อหลุยส์'")
+            reply_text(reply_token, "ยังไม่มีข้อมูลของคุณในระบบ")
+        return
+
+    # ── ถามอายุตัวเอง ──
+    if is_asking_own_age(normalized):
+        profile = get_profile(line_user_id)
+        if profile.get("age"):
+            reply_text(reply_token, f"คุณอายุ {profile['age']} ปีครับ 🎂")
+        else:
+            reply_text(reply_token, "ยังไม่มีข้อมูลของคุณในระบบ")
+        return
+
+    # ── ถามอาชีพตัวเอง ──
+    if is_asking_own_job(normalized):
+        profile = get_profile(line_user_id)
+        if profile.get("job"):
+            reply_text(reply_token, f"คุณทำอาชีพ {profile['job']} ครับ 💼")
+        else:
+            reply_text(reply_token, "ยังไม่มีข้อมูลของคุณในระบบ")
         return
 
     if is_asking_own_profile(normalized):
@@ -269,7 +289,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         return
 
     # ── แก้ไขโปรไฟล์โดยตรง ──
-    if normalized == "ล้างข้อมูลของฉัน":
+    if normalized in {"ล้างข้อมูลของฉัน", "ลบข้อมูลของฉัน"}:
         clear_profile(line_user_id)
         reply_text(reply_token, "🗑️ ล้างข้อมูลของคุณเรียบร้อยแล้วครับ")
         return
@@ -944,26 +964,18 @@ def _mode_prefix(mode: str) -> str:
 def _reply_profile(reply_token: str, user_id: str) -> None:
     """แสดงโปรไฟล์ของผู้ใช้"""
     profile = get_profile(user_id)
-    if not profile:
-        reply_text(
-            reply_token,
-            "👤 ยังไม่มีข้อมูลครับ\n\n"
-            "บอกได้เลย เช่น\n"
-            "• 'ผมชื่อหลุยส์'\n"
-            "• 'อายุ 28'\n"
-            "• 'อาชีพโปรแกรมเมอร์'\n"
-            "ผมจำไว้เลยครับ",
-        )
+    if not profile or not (profile.get("name") or profile.get("age") or profile.get("job") or profile.get("location")):
+        reply_text(reply_token, "ยังไม่มีข้อมูลของคุณในระบบ")
         return
-    lines = ["👤 ข้อมูลที่ผมจำไว้", "─" * 20]
+    lines = []
     if profile.get("name"):
-        lines.append(f"• ชื่อ: {profile['name']}")
+        lines.append(f"👤 ชื่อ: {profile['name']}")
     if profile.get("age"):
-        lines.append(f"• อายุ: {profile['age']} ปี")
+        lines.append(f"🎂 อายุ: {profile['age']} ปี")
     if profile.get("job"):
-        lines.append(f"• อาชีพ: {profile['job']}")
+        lines.append(f"💼 อาชีพ: {profile['job']}")
     if profile.get("location"):
-        lines.append(f"• ที่อยู่: {profile['location']}")
+        lines.append(f"📍 ที่อยู่: {profile['location']}")
     for k, v in profile.items():
         if k not in {"name", "age", "job", "location"}:
             lines.append(f"• {k}: {v}")

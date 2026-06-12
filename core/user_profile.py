@@ -206,6 +206,14 @@ _ASKING_PROFILE_RE = re.compile(
     r"จำ.*ผมได้|จำ.*เราได้|จำ.*ฉันได้"
 )
 
+_ASKING_AGE_RE = re.compile(
+    r"อายุเท่าไร|อายุเท่าไหร่|อายุของฉัน|อายุของผม|อายุของเรา|อายุเท่าไหร่แล้ว|เราอายุเท่าไหร่"
+)
+
+_ASKING_JOB_RE = re.compile(
+    r"อาชีพอะไร|ทำอาชีพอะไร|ทำงานอะไร|อาชีพของฉัน|อาชีพของผม|อาชีพของเรา|เราทำงานอะไร"
+)
+
 
 def is_asking_own_name(text: str) -> bool:
     return bool(_ASKING_NAME_RE.search(text))
@@ -213,3 +221,11 @@ def is_asking_own_name(text: str) -> bool:
 
 def is_asking_own_profile(text: str) -> bool:
     return bool(_ASKING_PROFILE_RE.search(text))
+
+
+def is_asking_own_age(text: str) -> bool:
+    return bool(_ASKING_AGE_RE.search(text))
+
+
+def is_asking_own_job(text: str) -> bool:
+    return bool(_ASKING_JOB_RE.search(text))
