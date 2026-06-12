@@ -246,6 +246,18 @@ def handle_event(event: dict[str, Any], request: Request) -> None:
         handle_image_message(reply_token, session_key, message.get("id", ""), request)
     elif message_type == "audio":
         handle_audio_message(reply_token, session_key, message.get("id", ""), source=source)
+    elif message_type == "file":
+        file_name = message.get("fileName", "")
+        ext = Path(file_name).suffix.lower()
+        if ext in {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".wma", ".webm"}:
+            handle_audio_message(reply_token, session_key, message.get("id", ""), source=source, custom_ext=ext)
+        else:
+            reply_text(
+                reply_token,
+                f"📁 ได้รับไฟล์ '{file_name}' เรียบร้อยแล้วครับ\n\n"
+                "ขณะนี้ระบบยังไม่รองรับการวิเคราะห์ไฟล์ประเภทนี้โดยตรง\n"
+                "หากต้องการสรุปเนื้อหา กรุณาส่งเป็นรูปภาพแทนนะครับ"
+            )
     else:
         reply_text(reply_token, build_help_message())
 
@@ -1568,9 +1580,15 @@ def cleanup_images(image_paths):
 
 
 # ── Audio handler ────────────────────────────────────────────────────
-def handle_audio_message(reply_token: str, session_key: str, message_id: str, source: dict | None = None) -> None:
-    content, _ = download_line_message_content(message_id)
-    tmp_path = UPLOAD_DIR / f"audio_{uuid.uuid4().hex}.m4a"
+def handle_audio_message(reply_token: str, session_key: str, message_id: str, source: dict | None = None, custom_ext: str | None = None) -> None:
+    content, content_type = download_line_message_content(message_id)
+    if custom_ext:
+        ext = custom_ext
+    else:
+        ext = guess_extension(content_type)
+        if ext not in {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".wma", ".webm"}:
+            ext = ".m4a"
+    tmp_path = UPLOAD_DIR / f"audio_{uuid.uuid4().hex}{ext}"
     tmp_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path.write_bytes(content)
     try:
