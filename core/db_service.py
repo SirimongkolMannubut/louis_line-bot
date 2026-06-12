@@ -1,70 +1,165 @@
-from __future__ import annotations
-
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
 
-DB_PATH = Path(__file__).resolve().parent.parent / "memory" / "louisai.db"
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+
+class ConnectionWrapper:
+    def __init__(self, conn, db_type):
+        self._conn = conn
+        self.db_type = db_type
+
+    def execute(self, query, params=None):
+        cursor = self._conn.cursor()
+        if self.db_type == "postgres":
+            # Convert SQLite parameter placeholder '?' to PostgreSQL '%s'
+            query = query.replace("?", "%s")
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query, params or ())
+        return cursor
+
+    def executescript(self, script_str):
+        if self.db_type == "postgres":
+            cursor = self._conn.cursor()
+            cursor.execute(script_str)
+            return cursor
+        else:
+            return self._conn.executescript(script_str)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
 
 
 @contextmanager
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+    if DATABASE_URL:
+        import psycopg2
+        import psycopg2.extras
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.DictCursor)
+        wrapper = ConnectionWrapper(conn, "postgres")
+        try:
+            yield wrapper
+            wrapper.commit()
+        except Exception:
+            wrapper.rollback()
+            raise
+        finally:
+            wrapper.close()
+    else:
+        DB_PATH = Path(__file__).resolve().parent.parent / "memory" / "louisai.db"
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        wrapper = ConnectionWrapper(conn, "sqlite")
+        try:
+            yield wrapper
+            wrapper.commit()
+        except Exception:
+            wrapper.rollback()
+            raise
+        finally:
+            wrapper.close()
 
 
 def init_db():
     with get_conn() as conn:
-        conn.executescript("""
-        CREATE TABLE IF NOT EXISTS transactions (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id   TEXT    NOT NULL,
-            type      TEXT    NOT NULL,
-            amount    REAL    NOT NULL,
-            category  TEXT,
-            note      TEXT,
-            date      TEXT    NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS events (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id     TEXT NOT NULL,
-            title       TEXT NOT NULL,
-            event_date  TEXT NOT NULL,
-            event_time  TEXT,
-            notified    INTEGER DEFAULT 0
-        );
-        CREATE TABLE IF NOT EXISTS slips (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id   TEXT NOT NULL,
-            amount    REAL,
-            bank      TEXT,
-            ref       TEXT,
-            datetime  TEXT,
-            raw_text  TEXT,
-            created   TEXT NOT NULL,
-            batch_id  TEXT
-        );
-        CREATE TABLE IF NOT EXISTS user_profile (
-            user_id    TEXT PRIMARY KEY,
-            name       TEXT,
-            age        TEXT,
-            job        TEXT,
-            location   TEXT,
-            data_json  TEXT DEFAULT '{}',
-            updated_at TEXT
-        );
-        """)
-        try:
-            conn.execute("ALTER TABLE slips ADD COLUMN batch_id TEXT")
-        except sqlite3.OperationalError:
-            pass
+        if conn.db_type == "postgres":
+            conn.executescript("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id        SERIAL PRIMARY KEY,
+                user_id   TEXT    NOT NULL,
+                type      TEXT    NOT NULL,
+                amount    DOUBLE PRECISION NOT NULL,
+                category  TEXT,
+                note      TEXT,
+                date      TEXT    NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS events (
+                id          SERIAL PRIMARY KEY,
+                user_id     TEXT NOT NULL,
+                title       TEXT NOT NULL,
+                event_date  TEXT NOT NULL,
+                event_time  TEXT,
+                notified    INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS slips (
+                id        SERIAL PRIMARY KEY,
+                user_id   TEXT NOT NULL,
+                amount    DOUBLE PRECISION,
+                bank      TEXT,
+                ref       TEXT,
+                datetime  TEXT,
+                raw_text  TEXT,
+                created   TEXT NOT NULL,
+                batch_id  TEXT
+            );
+            CREATE TABLE IF NOT EXISTS user_profile (
+                user_id    TEXT PRIMARY KEY,
+                name       TEXT,
+                age        TEXT,
+                job        TEXT,
+                location   TEXT,
+                data_json  TEXT DEFAULT '{}',
+                updated_at TEXT
+            );
+            """)
+        else:
+            conn.executescript("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id   TEXT    NOT NULL,
+                type      TEXT    NOT NULL,
+                amount    REAL    NOT NULL,
+                category  TEXT,
+                note      TEXT,
+                date      TEXT    NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS events (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     TEXT NOT NULL,
+                title       TEXT NOT NULL,
+                event_date  TEXT NOT NULL,
+                event_time  TEXT,
+                notified    INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS slips (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id   TEXT NOT NULL,
+                amount    REAL,
+                bank      TEXT,
+                ref       TEXT,
+                datetime  TEXT,
+                raw_text  TEXT,
+                created   TEXT NOT NULL,
+                batch_id  TEXT
+            );
+            CREATE TABLE IF NOT EXISTS user_profile (
+                user_id    TEXT PRIMARY KEY,
+                name       TEXT,
+                age        TEXT,
+                job        TEXT,
+                location   TEXT,
+                data_json  TEXT DEFAULT '{}',
+                updated_at TEXT
+            );
+            """)
+            try:
+                conn.execute("ALTER TABLE slips ADD COLUMN batch_id TEXT")
+            except Exception:
+                pass
 
 
 # ── Transactions ──────────────────────────────────────────────────────────────
@@ -89,7 +184,7 @@ def get_monthly_summary(user_id: str, year: int, month: int) -> dict:
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT type, SUM(amount) as total FROM transactions "
-            "WHERE user_id=? AND strftime('%Y-%m', date)=? GROUP BY type",
+            "WHERE user_id=? AND substr(date, 1, 7)=? GROUP BY type",
             (user_id, f"{year:04d}-{month:02d}"),
         ).fetchall()
     income = expense = 0.0

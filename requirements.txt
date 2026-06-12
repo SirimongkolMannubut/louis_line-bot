@@ -8,3 +8,4 @@ pytesseract
 apscheduler
 chromadb
 numpy<2
+psycopg2-binary
