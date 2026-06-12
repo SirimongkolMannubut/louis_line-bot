@@ -158,6 +158,11 @@ def extract_and_save_profile(user_id: str, text: str) -> dict:
     ดึงข้อมูลส่วนตัวจากข้อความแล้วบันทึกลง SQLite
     คืน dict ของข้อมูลที่บันทึกใหม่ (ว่างถ้าไม่พบอะไร)
     """
+    # ห้ามบันทึกข้อมูลผู้ใช้หากข้อความไม่มีคำสำคัญที่ระบุ
+    allowed_keywords = ["เราชื่อ", "ชื่อเรา", "อายุ", "เราอายุ", "อาชีพ"]
+    if not any(kw in text for kw in allowed_keywords):
+        return {}
+
     # ไม่ดึงจากประโยคถาม
     if _is_question(text):
         return {}
