@@ -32,7 +32,7 @@ def save_sessions(sessions: dict[str, Any]) -> None:
 
 
 def _default_session() -> dict[str, Any]:
-    return {"state": "idle", "mode": "pdf", "images": [], "slip_amounts": []}
+    return {"state": "idle", "mode": None, "current_mode": None, "images": [], "slip_amounts": []}
 
 
 def get_session(session_key: str) -> dict[str, Any]:
@@ -40,7 +40,8 @@ def get_session(session_key: str) -> dict[str, Any]:
     session = sessions.get(session_key)
     if isinstance(session, dict):
         session.setdefault("state", "idle")
-        session.setdefault("mode", "pdf")
+        session.setdefault("mode", None)
+        session.setdefault("current_mode", None)
         session.setdefault("images", [])
         session.setdefault("slip_amounts", [])
         return session
@@ -52,6 +53,7 @@ def start_pdf_flow(session_key: str, mode: str = "pdf") -> dict[str, Any]:
     session = {
         "state": "waiting_for_images",
         "mode": mode,
+        "current_mode": mode,
         "images": [],
         "slip_amounts": [],
         "updated_at": _now_iso(),
@@ -64,7 +66,8 @@ def start_pdf_flow(session_key: str, mode: str = "pdf") -> dict[str, Any]:
 def add_image(session_key: str, image_path: str) -> dict[str, Any]:
     sessions = load_sessions()
     session = sessions.get(session_key, _default_session())
-    session.setdefault("mode", "pdf")
+    session.setdefault("mode", None)
+    session.setdefault("current_mode", None)
     session.setdefault("images", [])
     session.setdefault("slip_amounts", [])
     session["state"] = "waiting_for_images"
@@ -105,7 +108,8 @@ def set_waiting_for_filename(session_key: str) -> dict[str, Any]:
     sessions = load_sessions()
     session = sessions.get(session_key, _default_session())
     session["state"] = "waiting_for_filename"
-    session.setdefault("mode", "pdf")
+    session.setdefault("mode", None)
+    session.setdefault("current_mode", None)
     session.setdefault("images", [])
     session.setdefault("slip_amounts", [])
     session["updated_at"] = _now_iso()
@@ -123,6 +127,8 @@ def set_waiting_for_pdf_confirm(
     sessions = load_sessions()
     session = sessions.get(session_key, _default_session())
     session["state"] = "waiting_for_pdf_confirm"
+    session.setdefault("mode", None)
+    session.setdefault("current_mode", None)
     if slip_data is not None:
         session["slip_data"] = slip_data
     if receipt_summaries is not None:
@@ -136,5 +142,8 @@ def set_waiting_for_pdf_confirm(
 def clear_session(session_key: str) -> dict[str, Any]:
     sessions = load_sessions()
     session = sessions.pop(session_key, _default_session())
+    session["state"] = "idle"
+    session["mode"] = None
+    session["current_mode"] = None
     save_sessions(sessions)
     return session

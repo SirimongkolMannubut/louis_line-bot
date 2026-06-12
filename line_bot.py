@@ -230,7 +230,8 @@ def handle_text_message(reply_token, session_key, text, request):
     normalized = normalize_text(raw_text)
     session = get_session(session_key)
     state = session.get("state", "idle")
-    mode = session.get("mode", "pdf")
+    mode = session.get("mode")
+    current_mode = session.get("current_mode")
     user_id = session_key
 
     if normalized in CANCEL_COMMANDS:
@@ -536,7 +537,8 @@ def handle_text_message(reply_token, session_key, text, request):
 def handle_image_message(reply_token, session_key, message_id, request):
     session = get_session(session_key)
     state = session.get("state", "idle")
-    mode = session.get("mode", "pdf")
+    mode = session.get("mode")
+    current_mode = session.get("current_mode")
 
     # ── ดาวน์โหลดรูปก่อนเสมอ ──
     content, content_type = download_line_message_content(message_id)
@@ -700,57 +702,53 @@ def _process_and_summarize_slips(
     """สรุปสลิปจาก slip_data ที่เก็บไว้แล้ว (ไม่ต้อง re-read)"""
     session = get_session(session_key)
     images = session.get("images", [])
+    try:
+        # ใช้ slip_data ที่เก็บไว้ตอนรับรูปก่อนเลย – ไม่ต้อง API call เพิ่ม
+        slip_data: list[dict] = session.get("slip_data", [])
 
-    # ใช้ slip_data ที่เก็บไว้ตอนรับรูปก่อนเลย – ไม่ต้อง API call เพิ่ม
-    slip_data: list[dict] = session.get("slip_data", [])
+        # fallback: ถ้า slip_data ยังไม่ครบ (session เก่าแบบที่ไม่มี slip_data)
+        if len(slip_data) < len(images):
+            reply_text(reply_token, "⏳ กำลังอ่านสลิปที่ยังไม่ได้อ่าน... รอสักครู่ครับ")
+            missing = images[len(slip_data) :]
+            for img_path in missing:
+                try:
+                    data = read_slip(img_path)
+                    slip_data.append(data)
+                except Exception:
+                    slip_data.append({"amount": 0.0, "bank": "", "ref": "", "date": ""})
+        else:
+            # ข้อมูลครบพร้อมแล้ว ไม่ต้องรอ
+            pass
 
-    # fallback: ถ้า slip_data ยังไม่ครบ (session เก่าแบบที่ไม่มี slip_data)
-    if len(slip_data) < len(images):
-        reply_text(reply_token, "⏳ กำลังอ่านสลิปที่ยังไม่ได้อ่าน... รอสักครู่ครับ")
-        missing = images[len(slip_data) :]
-        for img_path in missing:
-            try:
-                data = read_slip(img_path)
-                slip_data.append(data)
-            except Exception:
-                slip_data.append({"amount": 0.0, "bank": "", "ref": "", "date": ""})
-    else:
-        # ข้อมูลครบพร้อมแล้ว ไม่ต้องรอ
-        pass
+        total = sum(d.get("amount", 0) or 0 for d in slip_data)
+        valid = [(i + 1, d) for i, d in enumerate(slip_data) if d.get("amount")]
+        failed = [i + 1 for i, d in enumerate(slip_data) if not d.get("amount")]
 
-    total = sum(d.get("amount", 0) or 0 for d in slip_data)
-    valid = [(i + 1, d) for i, d in enumerate(slip_data) if d.get("amount")]
-    failed = [i + 1 for i, d in enumerate(slip_data) if not d.get("amount")]
-
-    lines = [f"📊 สรุปสลิปโอนเงิน", "─" * 28]
-    for idx, d in valid:
-        bank = d.get("bank", "")
-        amt = d.get("amount", 0)
-        date = d.get("date", "")
-        line = f"{idx}. {amt:,.0f} บาท"
-        if bank:
-            line += f"  ({bank})"
-        if date:
-            line += f"  {date}"
-        lines.append(line)
-    for idx in failed:
-        lines.append(f"{idx}. — (อ่านไม่ได้)")
-    lines += [
-        "─" * 28,
-        f"💰 ยอดรวมทั้งหมด",
-        f"{total:,.2f} บาท",
-    ]
-    if total > 0:
-        add_transaction(user_id, "income", total, "สลิปโอนเงิน")
-        lines.append("✅ บันทึกรายรับแล้ว")
-    lines += [
-        "",
-        "─" * 28,
-        "ต้องการสร้างรายงาน PDF ไหมครับ?",
-        "✅ 'สร้าง PDF'  ❌ 'ไม่ต้อง'",
-    ]
-    reply_text(reply_token, "\n".join(lines))
-    set_waiting_for_pdf_confirm(session_key, slip_data=slip_data)
+        lines = [f"📊 สรุปสลิปโอนเงิน", "─" * 28]
+        for idx, d in valid:
+            bank = d.get("bank", "")
+            amt = d.get("amount", 0)
+            date = d.get("date", "")
+            line = f"{idx}. {amt:,.0f} บาท"
+            if bank:
+                line += f"  ({bank})"
+            if date:
+                line += f"  {date}"
+            lines.append(line)
+        for idx in failed:
+            lines.append(f"{idx}. — (อ่านไม่ได้)")
+        lines += [
+            "─" * 28,
+            f"💰 ยอดรวมทั้งหมด",
+            f"{total:,.2f} บาท",
+        ]
+        if total > 0:
+            add_transaction(user_id, "income", total, "สลิปโอนเงิน")
+            lines.append("✅ บันทึกรายรับแล้ว")
+        reply_text(reply_token, "\n".join(lines))
+    finally:
+        clear_session(session_key)
+        cleanup_images(images)
 
 
 def _process_and_summarize_receipts(reply_token: str, session_key: str) -> None:
