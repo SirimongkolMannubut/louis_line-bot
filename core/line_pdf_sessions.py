@@ -49,6 +49,7 @@ def get_session(session_key: str) -> dict[str, Any]:
 
 
 def start_pdf_flow(session_key: str, mode: str = "pdf") -> dict[str, Any]:
+    import uuid
     sessions = load_sessions()
     session = {
         "state": "waiting_for_images",
@@ -56,6 +57,7 @@ def start_pdf_flow(session_key: str, mode: str = "pdf") -> dict[str, Any]:
         "current_mode": mode,
         "images": [],
         "slip_amounts": [],
+        "batch_id": uuid.uuid4().hex,
         "updated_at": _now_iso(),
     }
     sessions[session_key] = session

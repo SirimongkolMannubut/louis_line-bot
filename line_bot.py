@@ -21,6 +21,7 @@ from core.brain import ask_ai, clear_chat_history
 from core.db_service import (
     add_event,
     add_transaction,
+    get_latest_slip_batch,
     get_monthly_summary,
     get_recent_transactions,
     get_upcoming_events,
@@ -428,6 +429,54 @@ def handle_text_message(reply_token, session_key, text, request):
         _show_events(reply_token, user_id)
         return
 
+    # ── Commands: ดูสลิปทั้งหมด, สลิปที่ N, ยอดรวมสลิป ──
+    if normalized in {"ดูสลิปทั้งหมด", "ดูสลิป"}:
+        slips = get_latest_slip_batch(user_id)
+        if not slips:
+            reply_text(reply_token, "📭 ยังไม่มีข้อมูลสลิปที่บันทึกไว้ในครั้งล่าสุดครับ")
+            return
+        lines = ["📊 รายการสลิปล่าสุด:", "─" * 28]
+        for idx, s in enumerate(slips, 1):
+            amt = s.get("amount") or 0.0
+            bank = s.get("bank", "ไม่ระบุ")
+            lines.append(f"{idx}. {amt:,.2f} บาท ({bank})")
+        reply_text(reply_token, "\n".join(lines))
+        return
+
+    m = re.match(r"^สลิปที่\s*(\d+)$", normalized)
+    if m:
+        idx = int(m.group(1))
+        slips = get_latest_slip_batch(user_id)
+        if not slips:
+            reply_text(reply_token, "📭 ยังไม่มีข้อมูลสลิปที่บันทึกไว้ในครั้งล่าสุดครับ")
+            return
+        if 1 <= idx <= len(slips):
+            s = slips[idx - 1]
+            amt = s.get("amount") or 0.0
+            bank = s.get("bank", "ไม่ระบุ")
+            ref = s.get("ref") or "ไม่ระบุ"
+            dt = s.get("datetime") or "ไม่ระบุ"
+            msg = (
+                f"🧾 ข้อมูลสลิปใบที่ {idx}:\n"
+                f"💰 ยอดเงิน: {amt:,.2f} บาท\n"
+                f"🏦 ธนาคาร: {bank}\n"
+                f"🔖 อ้างอิง: {ref}\n"
+                f"🕐 วันที่: {dt}"
+            )
+            reply_text(reply_token, msg)
+        else:
+            reply_text(reply_token, f"⚠️ ไม่พบสลิปใบที่ {idx} ครับ (ครั้งล่าสุดมีทั้งหมด {len(slips)} ใบ)")
+        return
+
+    if normalized == "ยอดรวมสลิป":
+        slips = get_latest_slip_batch(user_id)
+        if not slips:
+            reply_text(reply_token, "📭 ยังไม่มีข้อมูลสลิปที่บันทึกไว้ในครั้งล่าสุดครับ")
+            return
+        total = sum(s.get("amount") or 0.0 for s in slips)
+        reply_text(reply_token, f"💰 ยอดรวมสลิปของครั้งล่าสุด:\n{total:,.2f} บาท")
+        return
+
     # ── Multi-slip command ──
     if _is_multi_slip_cmd(normalized):
         restart_flow(reply_token, session_key, "multi_slip")
@@ -745,6 +794,20 @@ def _process_and_summarize_slips(
         if total > 0:
             add_transaction(user_id, "income", total, "สลิปโอนเงิน")
             lines.append("✅ บันทึกรายรับแล้ว")
+
+        # บันทึกข้อมูลสลิปแต่ละใบลงฐานข้อมูลแยกกัน
+        batch_id = session.get("batch_id") or uuid.uuid4().hex
+        for d in slip_data:
+            save_slip(
+                user_id=user_id,
+                amount=d.get("amount"),
+                bank=d.get("bank", ""),
+                ref=d.get("ref", ""),
+                dt=d.get("date", ""),
+                raw_text=json.dumps(d),
+                batch_id=batch_id,
+            )
+
         reply_text(reply_token, "\n".join(lines))
     finally:
         clear_session(session_key)
@@ -1090,6 +1153,8 @@ def build_success_message(mode, safe_name, file_url, images, user_id):
         try:
             ocr_text = extract_text_from_images(images)
             slip = parse_slip(ocr_text)
+            session = get_session(user_id)
+            batch_id = session.get("batch_id") or uuid.uuid4().hex
             save_slip(
                 user_id,
                 slip["amount"],
@@ -1097,6 +1162,7 @@ def build_success_message(mode, safe_name, file_url, images, user_id):
                 slip["ref"],
                 slip["datetime"],
                 ocr_text,
+                batch_id,
             )
             return (
                 f"🧾 อ่านสลิปแล้วครับ\n💰 ยอด: {slip['amount']:,.2f} บาท\n"
