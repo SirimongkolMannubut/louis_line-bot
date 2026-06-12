@@ -49,7 +49,14 @@ from core.pdf_service import (
 )
 from core.scheduler import start_scheduler
 from core.slip_parser import parse_slip
-from core.user_profile import extract_and_save_profile, get_profile, save_profile
+from core.user_profile import (
+    extract_and_save_profile,
+    get_profile,
+    get_profile_summary,
+    is_asking_own_name,
+    is_asking_own_profile,
+    save_profile,
+)
 from core.vision_service import analyze_image, read_receipt, read_slip
 from core.voice_service import transcribe_and_summarize
 
@@ -209,14 +216,20 @@ def handle_text_message(reply_token, session_key, text, request):
 
     # ── User Profile ──
     if normalized in PROFILE_COMMANDS:
-        profile = get_profile(session_key)
-        if not profile:
-            reply_text(reply_token, "ยังไม่มีข้อมูลครับ บอกชื่อหรือข้อมูลส่วนตัวได้เลยครับ")
+        _reply_profile(reply_token, user_id)
+        return
+
+    # ── ถามชื่อตัวเอง ──
+    if is_asking_own_name(normalized):
+        profile = get_profile(user_id)
+        if profile.get("name"):
+            reply_text(reply_token, f"คุณชื่อคุณ{profile['name']}ครับ 😊")
         else:
-            lines = ["👤 โปรไฟล์ของคุณ\n"]
-            for k, v in profile.items():
-                lines.append(f"• {k}: {v}")
-            reply_text(reply_token, "\n".join(lines))
+            reply_text(reply_token, "ยังไม่รู้ชื่อคุณเลยครับ\nบอกได้เลยครับ เช่น 'ผมชื่อหลุยส์'")
+        return
+
+    if is_asking_own_profile(normalized):
+        _reply_profile(reply_token, user_id)
         return
 
     # ── Knowledge Base ──
@@ -458,9 +471,20 @@ def handle_text_message(reply_token, session_key, text, request):
         return
 
     # ── Auto extract profile ──
-    name = extract_and_save_profile(session_key, raw_text)
-    if name:
-        reply_text(reply_token, ask_ai(raw_text, user_id=session_key))
+    saved = extract_and_save_profile(user_id, raw_text)
+    if saved:
+        # สร้างข้อความยืนยันการจำชื่อแทนที่จะส่งไปหา AI
+        lines = ["✅ จำแล้วครับ"]
+        if saved.get("name"):
+            lines.append(f"👤 ชื่อ: {saved['name']}")
+        if saved.get("age"):
+            lines.append(f"🎂 อายุ: {saved['age']} ปี")
+        if saved.get("job"):
+            lines.append(f"💼 อาชีพ: {saved['job']}")
+        if saved.get("location"):
+            lines.append(f"📍 ที่อยู่: {saved['location']}")
+        lines.append("💬 ถามอะไรได้เลยครับ")
+        reply_text(reply_token, "\n".join(lines))
         return
 
     # ── Default AI ──
@@ -745,6 +769,35 @@ def _mode_prefix(mode: str) -> str:
         "ocr_summary_pdf": "ใบเสร็จ",
         "slip": "สลิป",
     }.get(mode, "report")
+
+
+def _reply_profile(reply_token: str, user_id: str) -> None:
+    """แสดงโปรไฟล์ของผู้ใช้"""
+    profile = get_profile(user_id)
+    if not profile:
+        reply_text(
+            reply_token,
+            "👤 ยังไม่มีข้อมูลครับ\n\n"
+            "บอกได้เลย เช่น\n"
+            "• 'ผมชื่อหลุยส์'\n"
+            "• 'อายุ 28'\n"
+            "• 'อาชีพโปรแกรมเมอร์'\n"
+            "ผมจำไว้เลยครับ",
+        )
+        return
+    lines = ["👤 ข้อมูลที่ผมจำไว้", "─" * 20]
+    if profile.get("name"):
+        lines.append(f"• ชื่อ: {profile['name']}")
+    if profile.get("age"):
+        lines.append(f"• อายุ: {profile['age']} ปี")
+    if profile.get("job"):
+        lines.append(f"• อาชีพ: {profile['job']}")
+    if profile.get("location"):
+        lines.append(f"• ที่อยู่: {profile['location']}")
+    for k, v in profile.items():
+        if k not in {"name", "age", "job", "location"}:
+            lines.append(f"• {k}: {v}")
+    reply_text(reply_token, "\n".join(lines))
 
 
 def _is_multi_slip_cmd(text: str) -> bool:

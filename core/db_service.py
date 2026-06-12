@@ -26,7 +26,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS transactions (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id   TEXT    NOT NULL,
-            type      TEXT    NOT NULL,  -- income / expense
+            type      TEXT    NOT NULL,
             amount    REAL    NOT NULL,
             category  TEXT,
             note      TEXT,
@@ -50,24 +50,42 @@ def init_db():
             raw_text  TEXT,
             created   TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS user_profile (
+            user_id    TEXT PRIMARY KEY,
+            name       TEXT,
+            age        TEXT,
+            job        TEXT,
+            location   TEXT,
+            data_json  TEXT DEFAULT '{}',
+            updated_at TEXT
+        );
         """)
 
 
 # ── Transactions ──────────────────────────────────────────────────────────────
-def add_transaction(user_id: str, type_: str, amount: float,
-                    category: str = "", note: str = "") -> None:
+def add_transaction(
+    user_id: str, type_: str, amount: float, category: str = "", note: str = ""
+) -> None:
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO transactions (user_id,type,amount,category,note,date) VALUES (?,?,?,?,?,?)",
-            (user_id, type_, amount, category, note, datetime.now().strftime("%Y-%m-%d"))
+            (
+                user_id,
+                type_,
+                amount,
+                category,
+                note,
+                datetime.now().strftime("%Y-%m-%d"),
+            ),
         )
+
 
 def get_monthly_summary(user_id: str, year: int, month: int) -> dict:
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT type, SUM(amount) as total FROM transactions "
             "WHERE user_id=? AND strftime('%Y-%m', date)=? GROUP BY type",
-            (user_id, f"{year:04d}-{month:02d}")
+            (user_id, f"{year:04d}-{month:02d}"),
         ).fetchall()
     income = expense = 0.0
     for r in rows:
@@ -77,11 +95,12 @@ def get_monthly_summary(user_id: str, year: int, month: int) -> dict:
             expense = r["total"]
     return {"income": income, "expense": expense, "balance": income - expense}
 
+
 def get_recent_transactions(user_id: str, limit: int = 10) -> list:
     with get_conn() as conn:
         return conn.execute(
             "SELECT * FROM transactions WHERE user_id=? ORDER BY id DESC LIMIT ?",
-            (user_id, limit)
+            (user_id, limit),
         ).fetchall()
 
 
@@ -90,26 +109,29 @@ def add_event(user_id: str, title: str, event_date: str, event_time: str = "") -
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO events (user_id,title,event_date,event_time) VALUES (?,?,?,?)",
-            (user_id, title, event_date, event_time)
+            (user_id, title, event_date, event_time),
         )
+
 
 def get_upcoming_events(user_id: str, limit: int = 10) -> list:
     today = datetime.now().strftime("%Y-%m-%d")
     with get_conn() as conn:
         return conn.execute(
             "SELECT * FROM events WHERE user_id=? AND event_date>=? ORDER BY event_date,event_time LIMIT ?",
-            (user_id, today, limit)
+            (user_id, today, limit),
         ).fetchall()
 
+
 def get_pending_notifications() -> list:
-    now  = datetime.now()
+    now = datetime.now()
     date = now.strftime("%Y-%m-%d")
     time = now.strftime("%H:%M")
     with get_conn() as conn:
         return conn.execute(
             "SELECT * FROM events WHERE notified=0 AND event_date=? AND event_time<=?",
-            (date, time)
+            (date, time),
         ).fetchall()
+
 
 def mark_notified(event_id: int) -> None:
     with get_conn() as conn:
@@ -117,12 +139,13 @@ def mark_notified(event_id: int) -> None:
 
 
 # ── Slips ─────────────────────────────────────────────────────────────────────
-def save_slip(user_id: str, amount: float | None, bank: str,
-              ref: str, dt: str, raw_text: str) -> None:
+def save_slip(
+    user_id: str, amount: float | None, bank: str, ref: str, dt: str, raw_text: str
+) -> None:
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO slips (user_id,amount,bank,ref,datetime,raw_text,created) VALUES (?,?,?,?,?,?,?)",
-            (user_id, amount, bank, ref, dt, raw_text, datetime.now().isoformat())
+            (user_id, amount, bank, ref, dt, raw_text, datetime.now().isoformat()),
         )
 
 
