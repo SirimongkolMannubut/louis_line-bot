@@ -27,4 +27,4 @@ COPY . .
 RUN mkdir -p storage/uploads storage/generated memory
 
 # ── รัน server ───────────────────────────────────────────────────────────────
-CMD uvicorn line_bot:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD ["sh", "-c", "uvicorn line_bot:app --host 0.0.0.0 --port ${PORT:-8000}"]
