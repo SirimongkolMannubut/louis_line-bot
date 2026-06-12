@@ -251,12 +251,14 @@ def handle_event(event: dict[str, Any], request: Request) -> None:
         ext = Path(file_name).suffix.lower()
         if ext in {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".wma", ".webm"}:
             handle_audio_message(reply_token, session_key, message.get("id", ""), source=source, custom_ext=ext)
+        elif ext in {".pdf", ".docx"}:
+            handle_document_file_message(reply_token, session_key, message.get("id", ""), file_name, request)
         else:
             reply_text(
                 reply_token,
                 f"📁 ได้รับไฟล์ '{file_name}' เรียบร้อยแล้วครับ\n\n"
                 "ขณะนี้ระบบยังไม่รองรับการวิเคราะห์ไฟล์ประเภทนี้โดยตรง\n"
-                "หากต้องการสรุปเนื้อหา กรุณาส่งเป็นรูปภาพแทนนะครับ"
+                "หากต้องการสรุปเนื้อหา กรุณาส่งเป็นไฟล์ PDF, Word (.docx) หรือรูปภาพแทนนะครับ"
             )
     else:
         reply_text(reply_token, build_help_message())
@@ -575,9 +577,12 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
     if state == "waiting_for_images":
         if normalized in DONE_COMMANDS:
             images = session.get("images", [])
-            if not images:
-                reply_text(reply_token, "📎 ยังไม่มีรูปครับ ส่งอย่างน้อย 1 รูปก่อนเลยครับ")
+            extracted_text = session.get("extracted_text", "")
+            
+            if not images and not extracted_text:
+                reply_text(reply_token, "📎 ยังไม่มีรูปหรือเอกสารครับ ส่งอย่างน้อย 1 รูปหรือไฟล์ PDF/Word ก่อนเลยครับ")
                 return
+                
             if mode == "multi_slip":
                 _process_and_summarize_slips(reply_token, session_key, user_id)
                 return
@@ -585,7 +590,10 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
                 _process_and_summarize_receipts(reply_token, session_key)
                 return
             if mode == "doc_summary":
-                _process_and_summarize_docs(reply_token, session_key, summary_type=raw_text)
+                if extracted_text and not images:
+                    _summarize_extracted_text(reply_token, session_key, extracted_text, summary_type=raw_text)
+                else:
+                    _process_and_summarize_docs(reply_token, session_key, summary_type=raw_text)
                 return
             set_waiting_for_filename(session_key)
             reply_text(
@@ -1485,36 +1493,33 @@ def build_welcome_message():
 
 def build_help_message():
     return (
-        f"🤖 {BOT_NAME}  ใช้งานได้ดังนี้\n"
+        f"🤖 {BOT_NAME} (เมนูบริการ)\n"
         "════════════════════\n"
-        "🧾 สลิปโอนเงิน (เก็บเป็นรายการ)\n"
-        "  • ส่งสลิปตรง ๆ → อ่านยอดอัตโนมัติ\n"
-        "  • พิมพ์ 'ดูสลิปทั้งหมด' / 'ยอดรวมสลิป'\n"
-        "  • พิมพ์ 'สลิปที่ 1' / 'สลิปที่ 2' เพื่อดูแยกใบ\n\n"
-        "📄 PDF & เอกสาร\n"
-        "  • พิมพ์ 'สรุปเอกสาร' → สรุปชีทเรียน/รายงาน/งานวิจัย (มี 5 โหมด)\n"
-        "  • พิมพ์ 'สรุปใบเสร็จ' → อ่านและสรุปข้อมูลใบเสร็จ\n\n"
-        "💰 บันทึกการเงิน (พิมพ์ตามสบาย)\n"
+        "📝 [NEW] สรุปชีทเรียน & เอกสาร\n"
+        "  • พิมพ์ 'สรุปเอกสาร' → สรุปจาก รูปถ่าย/ไฟล์ PDF/ไฟล์ Word (มี 5 โหมด)\n"
+        "  • พิมพ์ 'สรุปใบเสร็จ' → อ่านข้อมูลและสรุปบิล/ใบเสร็จรับเงิน\n\n"
+        "🖼️ แปลงรูปภาพ & ย่อรูป\n"
+        "  • พิมพ์ 'ทำ PDF' → รวมรูปภาพทั่วไปเป็นไฟล์ PDF\n"
+        "  • พิมพ์ 'จัดรูปลง A4' → จัดรูปเอกสารใส่หน้า A4 PDF (สมัครงาน/กยศ.)\n"
+        "  • พิมพ์ 'ย่อรูป' → ลดขนาดไฟล์รูปทันที (ลด KB/MB)\n\n"
+        "🧾 ระบบจัดการสลิป\n"
+        "  • ส่งสลิปโอนเงินตรง ๆ → ตรวจสอบและคำนวณยอดเงินอัตโนมัติ\n"
+        "  • พิมพ์ 'ดูสลิปทั้งหมด' / 'ยอดรวมสลิป' / 'สลิปที่ 1'\n\n"
+        "💰 บันทึกรายรับ-รายจ่าย\n"
         "  • พิมพ์ 'ค่าน้ำ 270' หรือ 'เงินเดือน 15000'\n"
         "  • พิมพ์ 'สรุปเดือนนี้' / 'รายการล่าสุด'\n\n"
         "📅 นัดหมาย & บันทึก\n"
-        "  • พิมพ์ 'นัด [เรื่อง] [ปี-เดือน-วัน] [เวลา]'\n"
-        "  • พิมพ์ 'ดูนัดหมาย'\n"
+        "  • พิมพ์ 'นัด [เรื่อง] [ปี-เดือน-วัน] [เวลา]' / 'ดูนัดหมาย'\n"
         "  • พิมพ์ 'บันทึก [ข้อความ]' / 'ดูบันทึก' / 'ลบบันทึก'\n\n"
-        "👤 โปรไฟล์ของฉัน\n"
+        "👤 โปรไฟล์ & ประวัติ\n"
         "  • พิมพ์ 'ข้อมูลของฉัน' เพื่อดูประวัติ\n"
-        "  • พิมพ์ 'เปลี่ยนชื่อเป็น [ชื่อ]' / 'เปลี่ยนอายุเป็น [อายุ]'\n"
-        "  • พิมพ์ 'ล้างข้อมูลของฉัน' เพื่อลบประวัติ\n\n"
-        "🖼️ จัดการรูปภาพ\n"
-        "  • พิมพ์ 'ย่อรูป' → ลดขนาดไฟล์รูป (KB/MB)\n"
-        "  • พิมพ์ 'จัดรูปลง A4' → จัดรูปถ่ายใส่ PDF ขนาด A4\n"
-        "  • พิมพ์ 'ทำ PDF' → รวมรูปทั่วไปเป็น PDF\n\n"
+        "  • พิมพ์ 'เปลี่ยนชื่อเป็น [ชื่อ]' / 'ล้างข้อมูลของฉัน'\n\n"
         "🌐 อื่น ๆ\n"
         "  • พิมพ์ 'แปลเป็นอังกฤษ: [ข้อความ]'\n"
-        "  • ส่งเสียงมา → แปลงเป็นข้อความแชท\n"
+        "  • ส่งเสียง / ไฟล์เสียง → แปลงเสียงเป็นข้อความแชท\n"
         "════════════════════\n"
-        "💬 ถามอะไรนอกเหนือจากนี้ได้เลยครับ!\n"
-        "👉 พิมพ์ 'ยกเลิก' เพื่อหยุดงานปัจจุบัน"
+        "👉 หากต้องการยกเลิกงานปัจจุบัน ให้พิมพ์ 'ยกเลิก'\n"
+        "💬 หรือพิมพ์ถามตอบเรื่องทั่วไปกับ AI ได้เลยครับ!"
     )
 
 
@@ -1597,3 +1602,85 @@ def handle_audio_message(reply_token: str, session_key: str, message_id: str, so
         reply_text(reply_token, result)
     finally:
         tmp_path.unlink(missing_ok=True)
+
+
+def handle_document_file_message(reply_token: str, session_key: str, message_id: str, file_name: str, request: Request) -> None:
+    content, content_type = download_line_message_content(message_id)
+    ext = Path(file_name).suffix.lower()
+
+    user_dir = UPLOAD_DIR / session_key.replace(":", "_")
+    user_dir.mkdir(parents=True, exist_ok=True)
+    file_path = user_dir / f"{uuid.uuid4().hex}{ext}"
+    file_path.write_bytes(content)
+
+    document_text = ""
+    if ext == ".pdf":
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(str(file_path))
+            text_parts = []
+            for i, page in enumerate(reader.pages, 1):
+                t = page.extract_text()
+                if t:
+                    text_parts.append(t)
+            document_text = "\n\n".join(text_parts).strip()
+        except ImportError:
+            reply_text(reply_token, "⚠️ ระบบยังไม่ได้ติดตั้งโมดูลสำหรับอ่าน PDF (pypdf)")
+            file_path.unlink(missing_ok=True)
+            return
+        except Exception as e:
+            reply_text(reply_token, f"เกิดข้อผิดพลาดในการอ่านไฟล์ PDF: {e}")
+            file_path.unlink(missing_ok=True)
+            return
+    elif ext == ".docx":
+        try:
+            import docx
+            doc = docx.Document(str(file_path))
+            text_parts = [para.text for para in doc.paragraphs if para.text]
+            document_text = "\n".join(text_parts).strip()
+        except ImportError:
+            reply_text(reply_token, "⚠️ ระบบยังไม่ได้ติดตั้งโมดูลสำหรับอ่าน Word (python-docx)")
+            file_path.unlink(missing_ok=True)
+            return
+        except Exception as e:
+            reply_text(reply_token, f"เกิดข้อผิดพลาดในการอ่านไฟล์ Word: {e}")
+            file_path.unlink(missing_ok=True)
+            return
+
+    file_path.unlink(missing_ok=True)
+
+    if not document_text.strip():
+        reply_text(reply_token, f"❌ ไม่พบข้อความในไฟล์ '{file_name}' หรือไฟล์นี้ไม่มีข้อความที่สามารถอ่านได้ครับ")
+        return
+
+    # เริ่มโหมดสรุปเอกสาร
+    start_pdf_flow(session_key, mode="doc_summary")
+    session = get_session(session_key)
+    session["extracted_text"] = document_text
+
+    msg = (
+        f"📄 ได้รับไฟล์เอกสาร '{file_name}' เรียบร้อยแล้วครับ\n"
+        f"อ่านข้อความพบประมาณ {len(document_text):,} ตัวอักษร\n\n"
+        f"กรุณาพิมพ์หรือกดเลือกโหมดที่ต้องการสรุป:\n"
+        f"• 'สรุปแบบสั้น' (ไม่เกิน 5 บรรทัด)\n"
+        f"• 'สรุปแบบละเอียด' (หรือพิมพ์ 'เสร็จแล้ว')\n"
+        f"• 'สรุปเพื่อสอบ' (มีประเด็นสำคัญ/สิ่งที่ควรจำ)\n"
+        f"• 'สรุปเป็นข้อ' (แบ่งเป็นประเด็นย่อยอย่างชัดเจน)\n"
+        f"• 'สรุปเป็น mind map' (โครงสร้างแผนผังความคิด)"
+    )
+    reply_text(reply_token, msg)
+
+
+def _summarize_extracted_text(reply_token: str, session_key: str, document_text: str, summary_type: str) -> None:
+    reply_text(reply_token, "⏳ กำลังประมวลผลสรุปเนื้อหาเอกสาร... รอสักครู่ครับ")
+    summary = summarize_document_text(document_text, summary_type)
+    mode_title = summary_type if summary_type in {"สรุปแบบสั้น", "สรุปแบบละเอียด", "สรุปเพื่อสอบ", "สรุปเป็นข้อ", "สรุปเป็น mind map"} else "สรุปแบบละเอียด"
+    msg = (
+        f"📝 ผลลัพธ์ {mode_title}\n"
+        f"════════════════════\n"
+        f"{summary}\n"
+        f"════════════════════\n"
+        f"ล้างข้อมูลเซสชันเรียบร้อยแล้วครับ พิมพ์คำสั่งอื่นต่อได้เลย 💬"
+    )
+    clear_session(session_key)
+    reply_text(reply_token, msg[:5000])

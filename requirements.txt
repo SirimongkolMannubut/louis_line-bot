@@ -9,3 +9,5 @@ apscheduler
 chromadb
 numpy<2
 psycopg2-binary
+pypdf
+python-docx
