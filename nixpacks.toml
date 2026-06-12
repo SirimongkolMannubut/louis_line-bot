@@ -1,10 +1,2 @@
-[phases.setup]
-aptPkgs = [
-  "tesseract-ocr",
-  "tesseract-ocr-tha",
-  "tesseract-ocr-eng",
-  "libtesseract-dev"
-]
-
-[phases.install]
-cmds = ["pip install -r requirements.txt"]
+# nixpacks.toml ไม่ถูกใช้งานเมื่อมี Dockerfile อยู่
+# Railway จะใช้ Dockerfile แทนโดยอัตโนมัติ
