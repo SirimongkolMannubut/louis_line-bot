@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libtesseract-dev \
     libgl1 \
     libglib2.0-0 \
+    fonts-thai-tlwg \
+    fonts-noto \
     && rm -rf /var/lib/apt/lists/*
 
 # ── ตรวจสอบว่าติดตั้งสำเร็จ (build จะหยุดถ้า error) ──────────────────────

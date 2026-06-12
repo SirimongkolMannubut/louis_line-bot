@@ -100,6 +100,25 @@ def set_waiting_for_filename(session_key: str) -> dict[str, Any]:
     return session
 
 
+def set_waiting_for_pdf_confirm(
+    session_key: str,
+    slip_data: list | None = None,
+    receipt_summaries: list[str] | None = None,
+) -> dict[str, Any]:
+    """ตั้งค่า state รอยืนยัน PDF หลังสรุปในแชทแล้ว"""
+    sessions = load_sessions()
+    session = sessions.get(session_key, _default_session())
+    session["state"] = "waiting_for_pdf_confirm"
+    if slip_data is not None:
+        session["slip_data"] = slip_data
+    if receipt_summaries is not None:
+        session["receipt_summaries"] = receipt_summaries
+    session["updated_at"] = _now_iso()
+    sessions[session_key] = session
+    save_sessions(sessions)
+    return session
+
+
 def clear_session(session_key: str) -> dict[str, Any]:
     sessions = load_sessions()
     session = sessions.pop(session_key, _default_session())
