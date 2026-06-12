@@ -4,9 +4,11 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import mimetypes
 import os
 import re
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -62,6 +64,8 @@ from core.vision_service import analyze_image, read_receipt, read_slip
 from core.voice_service import transcribe_and_summarize
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "storage" / "uploads"
@@ -1186,19 +1190,102 @@ def download_line_message_content(message_id):
     return r.content, r.headers.get("Content-Type", "application/octet-stream")
 
 
-def reply_text(reply_token, text):
-    requests.post(
-        LINE_REPLY_ENDPOINT,
-        headers={
-            "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "replyToken": reply_token,
-            "messages": [{"type": "text", "text": text[:5000]}],
-        },
-        timeout=30,
-    ).raise_for_status()
+def reply_text(reply_token: str, text: str) -> None:
+    """Send a reply message via LINE Messaging API.
+
+    Includes:
+    - UTF-8 / null-byte sanitisation before sending.
+    - Detailed diagnostic logging on failure.
+    - Exponential-backoff retry for transient (non-400) errors.
+    """
+    # ── Diagnostics: pre-flight checks ───────────────────────────────────────
+    token_set = bool(LINE_CHANNEL_ACCESS_TOKEN)
+    logger.debug(
+        "reply_text called | token_set=%s | reply_token=%.20s… | text_preview=%.200r",
+        token_set,
+        reply_token,
+        text,
+    )
+    if not token_set:
+        logger.error("reply_text: LINE_CHANNEL_ACCESS_TOKEN is not set — aborting send")
+        return
+
+    # ── Sanitise text ─────────────────────────────────────────────────────────
+    # Ensure valid UTF-8 (replace any undecodable bytes) and strip null bytes,
+    # both of which cause LINE's API to return 400.
+    if isinstance(text, bytes):
+        text = text.decode("utf-8", errors="replace")
+    text = text.replace("\x00", "")          # strip null bytes
+    text = text[:5000]                        # enforce LINE's 5 000-char limit
+
+    payload = {
+        "replyToken": reply_token,
+        "messages": [{"type": "text", "text": text}],
+    }
+    headers = {
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    # ── Send with retry (backoff for transient errors, no retry on 400) ───────
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            resp = requests.post(
+                LINE_REPLY_ENDPOINT,
+                headers=headers,
+                json=payload,
+                timeout=30,
+            )
+            if resp.status_code == 400:
+                # 400 is permanent (bad token, malformed body, expired token).
+                # Log everything useful and raise immediately — no retry.
+                logger.error(
+                    "reply_text: LINE returned 400 Bad Request | "
+                    "reply_token=%.20s… | text_len=%d | text_preview=%.200r | "
+                    "response_body=%s",
+                    reply_token,
+                    len(text),
+                    text,
+                    resp.text,
+                )
+                resp.raise_for_status()
+
+            resp.raise_for_status()
+            logger.debug(
+                "reply_text: success on attempt %d/%d | status=%d",
+                attempt,
+                max_attempts,
+                resp.status_code,
+            )
+            return  # success — exit the retry loop
+
+        except requests.HTTPError:
+            # Already logged above for 400; re-raise immediately.
+            raise
+        except requests.RequestException as exc:
+            # Transient network / timeout error — retry with backoff.
+            if attempt == max_attempts:
+                logger.error(
+                    "reply_text: transient error on final attempt %d/%d — giving up | "
+                    "reply_token=%.20s… | error=%s",
+                    attempt,
+                    max_attempts,
+                    reply_token,
+                    exc,
+                )
+                raise
+            backoff = 2 ** (attempt - 1)  # 1 s, 2 s
+            logger.warning(
+                "reply_text: transient error on attempt %d/%d — retrying in %ds | "
+                "reply_token=%.20s… | error=%s",
+                attempt,
+                max_attempts,
+                backoff,
+                reply_token,
+                exc,
+            )
+            time.sleep(backoff)
 
 
 def build_file_url(request, filename):
