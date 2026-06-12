@@ -25,12 +25,13 @@ def transcribe_audio(audio_path: str) -> str:
         return f"[Error] {e}"
 
 
-def transcribe_and_summarize(audio_path: str, ask_ai_fn, user_id: str = "default") -> str:
+def transcribe_and_summarize(audio_path: str, ask_ai_fn, user_id: str = "default", profile_user_id: str | None = None) -> str:
     text = transcribe_audio(audio_path)
     if text.startswith("[Error]"):
         return text
     summary = ask_ai_fn(
         f"สรุปข้อความต่อไปนี้เป็นภาษาไทย กระชับ อ่านง่าย:\n{text}",
-        user_id=user_id
+        user_id=user_id,
+        profile_user_id=profile_user_id
     )
     return f"🎤 ข้อความจากเสียง:\n{text}\n\n📋 สรุป:\n{summary}"

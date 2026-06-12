@@ -63,14 +63,14 @@ def list_documents(user_id: str) -> list[str]:
         return []
 
 
-def ask_with_knowledge(user_id: str, question: str, ask_ai_fn) -> str:
+def ask_with_knowledge(user_id: str, question: str, ask_ai_fn, profile_user_id: str | None = None) -> str:
     chunks = search(user_id, question)
     if not chunks:
-        return ask_ai_fn(question, user_id=user_id)
+        return ask_ai_fn(question, user_id=user_id, profile_user_id=profile_user_id)
     context = "\n\n".join(chunks)
     prompt  = (
         f"ใช้ข้อมูลต่อไปนี้เพื่อตอบคำถาม:\n\n{context}\n\n"
         f"คำถาม: {question}\n\n"
         f"ถ้าข้อมูลไม่เพียงพอ ให้บอกตามจริง"
     )
-    return ask_ai_fn(prompt, user_id=user_id)
+    return ask_ai_fn(prompt, user_id=user_id, profile_user_id=profile_user_id)

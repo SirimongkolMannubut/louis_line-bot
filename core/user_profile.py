@@ -69,6 +69,13 @@ def save_profile(user_id: str, data: dict) -> None:
         )
 
 
+def clear_profile(user_id: str) -> None:
+    """ลบข้อมูลผู้ใช้ทั้งหมด"""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM user_profile WHERE user_id=?", (user_id,))
+
+
+
 def get_profile_summary(user_id: str) -> str:
     """คืนสรุปโปรไฟล์เป็น string สำหรับ inject เข้า system prompt"""
     profile = get_profile(user_id)

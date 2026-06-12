@@ -41,10 +41,11 @@ def _save_history(user_id: str, history: list) -> None:
     )
 
 
-def ask_ai(message: str, user_id: str = "default") -> str:
+def ask_ai(message: str, user_id: str = "default", profile_user_id: str | None = None) -> str:
     try:
         from core.user_profile import get_profile_summary
-        profile = get_profile_summary(user_id)
+        target_profile_id = profile_user_id or user_id
+        profile = get_profile_summary(target_profile_id)
         system  = SYSTEM_PROMPT
         if profile:
             system += f"\n\nข้อมูลผู้ใช้:\n{profile}"

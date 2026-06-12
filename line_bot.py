@@ -58,6 +58,7 @@ from core.user_profile import (
     is_asking_own_name,
     is_asking_own_profile,
     save_profile,
+    clear_profile,
 )
 from core.vision_service import analyze_image, read_receipt, read_slip
 from core.voice_service import transcribe_and_summarize
@@ -145,7 +146,7 @@ VOICE_COMMANDS = {"สรุปเสียง", "แปลงเสียง", 
 KB_COMMANDS = {"knowledge base", "คลังความรู้", "อัปโหลดเอกสาร"}
 KB_LIST_COMMANDS = {"ดูเอกสาร", "รายการเอกสาร", "list kb"}
 KB_ASK_COMMANDS = {"ถามจากเอกสาร", "ค้นหาเอกสาร", "ask kb"}
-PROFILE_COMMANDS = {"โปรไฟล์", "ข้อมูลฉัน", "ข้อมูลผม", "profile"}
+PROFILE_COMMANDS = {"โปรไฟล์", "ข้อมูลฉัน", "ข้อมูลผม", "profile", "ข้อมูลของฉัน"}
 CANCEL_COMMANDS = {"ยกเลิก", "cancel", "เริ่มใหม่"}
 DONE_COMMANDS = {"เสร็จแล้ว", "ครบแล้ว", "สร้าง pdf"}
 PDF_YES_COMMANDS = {
@@ -216,17 +217,17 @@ def handle_event(event: dict[str, Any], request: Request) -> None:
     message = event.get("message", {})
     message_type = message.get("type")
     if message_type == "text":
-        handle_text_message(reply_token, session_key, message.get("text", ""), request)
+        handle_text_message(reply_token, session_key, message.get("text", ""), request, source=source)
     elif message_type == "image":
         handle_image_message(reply_token, session_key, message.get("id", ""), request)
     elif message_type == "audio":
-        handle_audio_message(reply_token, session_key, message.get("id", ""))
+        handle_audio_message(reply_token, session_key, message.get("id", ""), source=source)
     else:
         reply_text(reply_token, build_help_message())
 
 
 # ── Text ──────────────────────────────────────────────────────────────────────
-def handle_text_message(reply_token, session_key, text, request):
+def handle_text_message(reply_token, session_key, text, request, source=None):
     raw_text = text.strip()
     normalized = normalize_text(raw_text)
     session = get_session(session_key)
@@ -234,6 +235,7 @@ def handle_text_message(reply_token, session_key, text, request):
     mode = session.get("mode")
     current_mode = session.get("current_mode")
     user_id = session_key
+    line_user_id = (source or {}).get("userId") or session_key
 
     if normalized in CANCEL_COMMANDS:
         old = clear_session(session_key)
@@ -250,12 +252,12 @@ def handle_text_message(reply_token, session_key, text, request):
 
     # ── User Profile ──
     if normalized in PROFILE_COMMANDS:
-        _reply_profile(reply_token, user_id)
+        _reply_profile(reply_token, line_user_id)
         return
 
     # ── ถามชื่อตัวเอง ──
     if is_asking_own_name(normalized):
-        profile = get_profile(user_id)
+        profile = get_profile(line_user_id)
         if profile.get("name"):
             reply_text(reply_token, f"คุณชื่อคุณ{profile['name']}ครับ 😊")
         else:
@@ -263,7 +265,34 @@ def handle_text_message(reply_token, session_key, text, request):
         return
 
     if is_asking_own_profile(normalized):
-        _reply_profile(reply_token, user_id)
+        _reply_profile(reply_token, line_user_id)
+        return
+
+    # ── แก้ไขโปรไฟล์โดยตรง ──
+    if normalized == "ล้างข้อมูลของฉัน":
+        clear_profile(line_user_id)
+        reply_text(reply_token, "🗑️ ล้างข้อมูลของคุณเรียบร้อยแล้วครับ")
+        return
+
+    m_name = re.match(r"^เปลี่ยนชื่อเป็น\s*(.+)", raw_text)
+    if m_name:
+        new_name = m_name.group(1).strip()
+        save_profile(line_user_id, {"name": new_name})
+        reply_text(reply_token, f"✅ เปลี่ยนชื่อเป็น '{new_name}' เรียบร้อยแล้วครับ")
+        return
+
+    m_age = re.match(r"^เปลี่ยนอายุเป็น\s*(.+)", raw_text)
+    if m_age:
+        new_age = m_age.group(1).strip()
+        save_profile(line_user_id, {"age": new_age})
+        reply_text(reply_token, f"✅ เปลี่ยนอายุเป็น {new_age} ปี เรียบร้อยแล้วครับ")
+        return
+
+    m_job = re.match(r"^เปลี่ยนอาชีพเป็น\s*(.+)", raw_text)
+    if m_job:
+        new_job = m_job.group(1).strip()
+        save_profile(line_user_id, {"job": new_job})
+        reply_text(reply_token, f"✅ เปลี่ยนอาชีพเป็น '{new_job}' เรียบร้อยแล้วครับ")
         return
 
     # ── Knowledge Base ──
@@ -363,12 +392,12 @@ def handle_text_message(reply_token, session_key, text, request):
         reply_text(reply_token, "ล้างประวัติการสนทนาแล้วครับ 🗑")
         return
 
-    if normalized in {"ล้างโปรไฟล์", "ลบโปรไฟล์", "reset profile", "เริ่มใหม่โปรไฟล์"}:
+    if normalized in {"ล้างโปรไฟล์", "ลบโปรไฟล์", "reset profile", "เริ่มใหม่โปรไฟล์", "ล้างข้อมูลของฉัน"}:
         from core.db_service import get_conn
 
         with get_conn() as c:
-            c.execute("DELETE FROM user_profile WHERE user_id=?", (user_id,))
-        reply_text(reply_token, "✅ ลบข้อมูลแล้วครับ บอกชื่อ/อายุ/อาชีพใหม่ได้เลยครับ")
+            c.execute("DELETE FROM user_profile WHERE user_id=?", (line_user_id,))
+        reply_text(reply_token, "✅ ลบข้อมูลส่วนตัวของคุณเรียบร้อยแล้วครับ บอกชื่อ/อายุ/อาชีพใหม่ได้เลยครับ")
         return
 
     # ── Finance ──
@@ -503,7 +532,7 @@ def handle_text_message(reply_token, session_key, text, request):
             return
         # ถ้าไม่ใช่คำสั่ง ตอบคำถามผ่าน AI ได้ (ไม่ reset state)
         hint = f"[{waiting_msg(mode)}]"
-        reply_text(reply_token, ask_ai(f"{raw_text}\n{hint}", user_id=user_id))
+        reply_text(reply_token, ask_ai(f"{raw_text}\n{hint}", user_id=user_id, profile_user_id=line_user_id))
         return
 
     # ── รอยืนยันว่าจะสร้าง PDF ไหม ──
@@ -555,8 +584,31 @@ def handle_text_message(reply_token, session_key, text, request):
             reply_text(reply_token, f"เกิดปัญหาสร้าง PDF ครับ: {exc}")
         return
 
+    # ── เปลี่ยนชื่อ/อายุ/อาชีพ เป็น ... ──
+    m = re.match(r"^เปลี่ยนชื่อเป็น\s*(.+)$", normalized)
+    if m:
+        new_name = m.group(1).strip()
+        save_profile(line_user_id, {"name": new_name})
+        reply_text(reply_token, f"✅ เปลี่ยนชื่อเป็นคุณ {new_name} เรียบร้อยแล้วครับ")
+        return
+
+    m = re.match(r"^เปลี่ยนอายุเป็น\s*(.+)$", normalized)
+    if m:
+        new_age = m.group(1).strip()
+        new_age = re.sub(r"\s*ปี\s*$", "", new_age).strip()
+        save_profile(line_user_id, {"age": new_age})
+        reply_text(reply_token, f"✅ เปลี่ยนอายุเป็น {new_age} ปี เรียบร้อยแล้วครับ")
+        return
+
+    m = re.match(r"^เปลี่ยนอาชีพเป็น\s*(.+)$", normalized)
+    if m:
+        new_job = m.group(1).strip()
+        save_profile(line_user_id, {"job": new_job})
+        reply_text(reply_token, f"✅ เปลี่ยนอาชีพเป็น {new_job} เรียบร้อยแล้วครับ")
+        return
+
     # ── Auto extract profile ──
-    saved = extract_and_save_profile(user_id, raw_text)
+    saved = extract_and_save_profile(line_user_id, raw_text)
     if saved:
         # สร้างข้อความยืนยันการจำชื่อแทนที่จะส่งไปหา AI
         lines = ["✅ จำแล้วครับ"]
@@ -577,9 +629,9 @@ def handle_text_message(reply_token, session_key, text, request):
     from core.knowledge_base import list_documents
 
     if list_documents(session_key):
-        reply_text(reply_token, ask_with_knowledge(session_key, raw_text, ask_ai))
+        reply_text(reply_token, ask_with_knowledge(session_key, raw_text, ask_ai, profile_user_id=line_user_id))
     else:
-        reply_text(reply_token, ask_ai(raw_text, user_id=session_key))
+        reply_text(reply_token, ask_ai(raw_text, user_id=session_key, profile_user_id=line_user_id))
 
 
 # ── Image ─────────────────────────────────────────────────────────────────────
@@ -1344,13 +1396,14 @@ def cleanup_images(image_paths):
 
 
 # ── Audio handler ────────────────────────────────────────────────────
-def handle_audio_message(reply_token: str, session_key: str, message_id: str) -> None:
+def handle_audio_message(reply_token: str, session_key: str, message_id: str, source: dict | None = None) -> None:
     content, _ = download_line_message_content(message_id)
     tmp_path = UPLOAD_DIR / f"audio_{uuid.uuid4().hex}.m4a"
     tmp_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path.write_bytes(content)
     try:
-        result = transcribe_and_summarize(str(tmp_path), ask_ai, user_id=session_key)
+        line_user_id = (source or {}).get("userId") or session_key
+        result = transcribe_and_summarize(str(tmp_path), ask_ai, user_id=session_key, profile_user_id=line_user_id)
         reply_text(reply_token, result)
     finally:
         tmp_path.unlink(missing_ok=True)
