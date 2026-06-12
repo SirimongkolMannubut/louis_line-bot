@@ -43,15 +43,18 @@ def _save_history(user_id: str, history: list) -> None:
 
 def ask_ai(message: str, user_id: str = "default") -> str:
     try:
+        from core.user_profile import get_profile_summary
+        profile = get_profile_summary(user_id)
+        system  = SYSTEM_PROMPT
+        if profile:
+            system += f"\n\nข้อมูลผู้ใช้:\n{profile}"
+
         history = _load_history(user_id)
         history.append({"role": "user", "content": message})
-
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history[-MAX_HISTORY:]
+        messages = [{"role": "system", "content": system}] + history[-MAX_HISTORY:]
 
         res = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            max_tokens=800,
+            model=MODEL, messages=messages, max_tokens=800,
         )
         reply = res.choices[0].message.content
         history.append({"role": "assistant", "content": reply})

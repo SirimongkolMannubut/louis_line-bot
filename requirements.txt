@@ -6,3 +6,5 @@ requests
 pillow
 pytesseract
 apscheduler
+chromadb
+numpy<2
