@@ -305,14 +305,8 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         try:
             build_pdf_from_images(images, str(output_path))
             file_url = build_file_url(request, pdf_filename)
-            icon = "🖼️" if mode == "resize" else "📄"
-            n = len(images)
-            reply_text(
-                reply_token,
-                f"✅ สร้าง PDF เรียบร้อยแล้วครับ {icon}\n"
-                f"{n} รูป → {safe_name}.pdf\n"
-                f"🔗 {file_url}",
-            )
+            title = "จัดหน้ากระดาษ A4" if mode == "resize" else "รวมรูปภาพเป็น PDF"
+            reply_pdf_success(reply_token, title, safe_name, f"{len(images)} รูป", file_url)
             clear_session(session_key)
             cleanup_images(images)
         except Exception as exc:
@@ -1090,7 +1084,18 @@ def _create_confirmed_pdf(
         file_url = build_file_url(request, pdf_filename)
         clear_session(session_key)
         cleanup_images(images)
-        reply_text(reply_token, f"✅ สร้างรายงาน PDF เรียบร้อยแล้วครับ\n🔗 {file_url}")
+        title = "รวมรูปภาพเป็น PDF"
+        detail_text = f"{len(images)} รูป"
+        if mode == "multi_slip":
+            title = "รายงานสลิปโอนเงิน"
+            detail_text = f"รวมยอดสลิป {len(slip_data)} ใบ"
+        elif mode == "ocr_summary_pdf":
+            title = "รายงานสรุปใบเสร็จ/บิล"
+            detail_text = f"วิเคราะห์ใบเสร็จ {len(receipt_summaries)} ใบ"
+        elif mode == "doc_summary":
+            title = "รายงานสรุปเอกสาร"
+            detail_text = "สรุปเนื้อหาบทเรียน"
+        reply_pdf_success(reply_token, title, pdf_filename[:-4], detail_text, file_url)
     except Exception as exc:
         reply_text(reply_token, f"เกิดปัญหาสร้าง PDF ครับ: {exc}")
 
@@ -1685,6 +1690,129 @@ def reply_text(reply_token, text):
         },
         timeout=30,
     ).raise_for_status()
+
+
+def reply_pdf_success(reply_token, title, safe_name, detail_text, file_url):
+    alt_text = f"✅ สร้าง PDF สำเร็จแล้ว: {safe_name}.pdf"
+    
+    contents = {
+      "type": "bubble",
+      "body": {
+        "type": "box",
+        "layout": "vertical",
+        "contents": [
+          {
+            "type": "text",
+            "text": "📄 PDF CREATED",
+            "weight": "bold",
+            "color": "#1DB954",
+            "size": "sm"
+          },
+          {
+            "type": "text",
+            "text": title,
+            "weight": "bold",
+            "size": "xl",
+            "margin": "md",
+            "color": "#111111"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "margin": "lg",
+            "spacing": "sm",
+            "contents": [
+              {
+                "type": "box",
+                "layout": "baseline",
+                "spacing": "sm",
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": "ชื่อไฟล์",
+                    "color": "#aaaaaa",
+                    "size": "sm",
+                    "flex": 2
+                  },
+                  {
+                    "type": "text",
+                    "text": f"{safe_name}.pdf",
+                    "wrap": True,
+                    "color": "#333333",
+                    "size": "sm",
+                    "flex": 5
+                  }
+                ]
+              },
+              {
+                "type": "box",
+                "layout": "baseline",
+                "spacing": "sm",
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": "รายละเอียด",
+                    "color": "#aaaaaa",
+                    "size": "sm",
+                    "flex": 2
+                  },
+                  {
+                    "type": "text",
+                    "text": detail_text,
+                    "wrap": True,
+                    "color": "#333333",
+                    "size": "sm",
+                    "flex": 5
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "footer": {
+        "type": "box",
+        "layout": "vertical",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "button",
+            "style": "primary",
+            "height": "sm",
+            "color": "#1DB954",
+            "action": {
+              "type": "uri",
+              "label": "📂 เปิดไฟล์ PDF",
+              "uri": file_url
+            }
+          }
+        ]
+      }
+    }
+    
+    try:
+        requests.post(
+            LINE_REPLY_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "replyToken": reply_token,
+                "messages": [
+                    {
+                        "type": "flex",
+                        "altText": alt_text,
+                        "contents": contents
+                    }
+                ],
+            },
+            timeout=30,
+        ).raise_for_status()
+    except Exception as e:
+        print(f"[LINE] Flex message failed: {e}. Falling back to text.")
+        fallback_text = f"✅ สร้าง PDF เรียบร้อยแล้วครับ 📄\n{detail_text} → {safe_name}.pdf\n🔗 {file_url}"
+        reply_text(reply_token, fallback_text)
 
 
 def build_file_url(request, filename):
