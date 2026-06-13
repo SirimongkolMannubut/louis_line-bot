@@ -300,7 +300,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
             clear_session(session_key)
             reply_text(reply_token, "⚠️ ไม่พบรูปครับ เริ่มใหม่ได้เลยครับ")
             return
-        pdf_filename = f"{safe_name}-{uuid.uuid4().hex[:8]}.pdf"
+        pdf_filename = f"{safe_name}.pdf"
         output_path = GENERATED_DIR / pdf_filename
         try:
             build_pdf_from_images(images, str(output_path))
