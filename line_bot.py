@@ -155,8 +155,6 @@ RECENT_COMMANDS = {
 }
 EVENT_COMMANDS = {"นัดหมาย", "เพิ่มนัด", "ตั้งนัด", "event", "ปฏิทิน"}
 EVENT_LIST_COMMANDS = {"ดูนัดหมาย", "นัดหมายทั้งหมด", "ตารางงาน"}
-A4_COMMANDS = {"จัดรูปลง a4", "จัดรูป a4", "a4", "จัดรูปลงกระดาษ a4"}
-COMPRESS_COMMANDS = {"ย่อรูป", "บีบรูป", "ลดขนาดรูป", "compress", "ย่อขนาดรูป", "ย่อขนาดไฟล์รูป", "ลดขนาดไฟล์รูป"}
 VOICE_COMMANDS = {"สรุปเสียง", "แปลงเสียง", "voice", "อ่านเสียง"}
 KB_COMMANDS = {"knowledge base", "คลังความรู้", "อัปโหลดเอกสาร"}
 KB_LIST_COMMANDS = {"ดูเอกสาร", "รายการเอกสาร", "list kb"}
@@ -401,12 +399,6 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         return
     if normalized in SLIP_COMMANDS:
         restart_flow(reply_token, session_key, "slip")
-        return
-    if normalized in A4_COMMANDS:
-        restart_flow(reply_token, session_key, "resize")
-        return
-    if normalized in COMPRESS_COMMANDS:
-        restart_flow(reply_token, session_key, "compress")
         return
 
     # ── Voice ──
@@ -1611,12 +1603,6 @@ def build_submenu_message(category: str) -> str:
             "📑\n"
             "'ทำ PDF'\n\n"
             "รวมรูปภาพหลายรูปเป็นไฟล์ PDF เดียว\n\n"
-            "📐\n"
-            "'จัดรูปลง A4'\n\n"
-            "จัดรูปถ่ายใส่กระดาษ A4 อัตโนมัติ\n\n"
-            "🗜️\n"
-            "'ย่อรูป'\n\n"
-            "ลดขนาดไฟล์รูปทันที (ลด KB / MB)\n\n"
             "💡 ทิป: หากต้องการสรุปเอกสารชีทเรียน พิมพ์ 'เอกสาร'\n\n"
             "👉 พิมพ์ 'เมนู' เพื่อกลับหน้าหลัก\n"
             "👉 พิมพ์ 'ยกเลิก' เพื่อหยุดงานปัจจุบัน"
