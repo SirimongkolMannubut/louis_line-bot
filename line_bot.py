@@ -286,6 +286,39 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         reply_text(reply_token, build_help_message())
         return
 
+    # ── ตรวจ waiting states ก่อน routing เมนู ──
+    if state == "waiting_for_filename":
+        safe_name = sanitize_filename(raw_text)
+        if not safe_name:
+            reply_text(
+                reply_token,
+                "⚠️ ชื่อไฟล์นั้นใช้ไม่ได้ครับ\nกรุณาใช้ตัวอักษร ตัวเลข เว้นวรรค หรือขีดกลางเท่านั้น",
+            )
+            return
+        images = session.get("images", [])
+        if not images:
+            clear_session(session_key)
+            reply_text(reply_token, "⚠️ ไม่พบรูปครับ เริ่มใหม่ได้เลยครับ")
+            return
+        pdf_filename = f"{safe_name}-{uuid.uuid4().hex[:8]}.pdf"
+        output_path = GENERATED_DIR / pdf_filename
+        try:
+            build_pdf_from_images(images, str(output_path))
+            file_url = build_file_url(request, pdf_filename)
+            icon = "🖼️" if mode == "resize" else "📄"
+            n = len(images)
+            reply_text(
+                reply_token,
+                f"✅ สร้าง PDF เรียบร้อยแล้วครับ {icon}\n"
+                f"{n} รูป → {safe_name}.pdf\n"
+                f"🔗 {file_url}",
+            )
+            clear_session(session_key)
+            cleanup_images(images)
+        except Exception as exc:
+            reply_text(reply_token, f"เกิดปัญหาสร้าง PDF ครับ: {exc}")
+        return
+
     # ── Sub-menu Routing ──
     submenu_msg = build_submenu_message(normalized)
     if submenu_msg:
@@ -627,38 +660,6 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
                 "✅ 'สร้าง PDF' → สร้างรายงานพร้อมรูป\n"
                 "❌ 'ไม่ต้อง' → จบเลยครับ",
             )
-        return
-
-    if state == "waiting_for_filename":
-        safe_name = sanitize_filename(raw_text)
-        if not safe_name:
-            reply_text(
-                reply_token,
-                "⚠️ ชื่อไฟล์นั้นใช้ไม่ได้ครับ\nกรุณาใช้ตัวอักษร ตัวเลข เว้นวรรค หรือขีดกลางเท่านั้น",
-            )
-            return
-        images = session.get("images", [])
-        if not images:
-            clear_session(session_key)
-            reply_text(reply_token, "⚠️ ไม่พบรูปครับ เริ่มใหม่ได้เลยครับ")
-            return
-        pdf_filename = f"{safe_name}-{uuid.uuid4().hex[:8]}.pdf"
-        output_path = GENERATED_DIR / pdf_filename
-        try:
-            build_pdf_from_images(images, str(output_path))
-            file_url = build_file_url(request, pdf_filename)
-            icon = "🖼️" if mode == "resize" else "📄"
-            n = len(images)
-            reply_text(
-                reply_token,
-                f"✅ สร้าง PDF เรียบร้อยแล้วครับ {icon}\n"
-                f"{n} รูป → {safe_name}.pdf\n"
-                f"🔗 {file_url}",
-            )
-            clear_session(session_key)
-            cleanup_images(images)
-        except Exception as exc:
-            reply_text(reply_token, f"เกิดปัญหาสร้าง PDF ครับ: {exc}")
         return
 
     # ── เปลี่ยนชื่อ/อายุ/อาชีพ เป็น ... ──
