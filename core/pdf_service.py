@@ -58,17 +58,12 @@ def _draw_text_page(lines: list[tuple[str, int, str]]) -> Image.Image:
 
 
 def build_pdf_from_images(image_paths: Iterable[str], output_path: str) -> str:
-    """รวมรูปเป็น PDF (โหมด ทำ PDF ธรรมดา)"""
+    """รวมรูปเป็น PDF (ขนาดเท่ารูปจริง ไม่มีขอบขาว)"""
     pages: list[Image.Image] = []
     for image_path in image_paths:
         img = Image.open(image_path)
         img = ImageOps.exif_transpose(img).convert("RGB")
-        img.thumbnail((A4_WIDTH - MARGIN * 2, A4_HEIGHT - MARGIN * 2))
-        page = Image.new("RGB", (A4_WIDTH, A4_HEIGHT), "white")
-        x = (A4_WIDTH - img.width) // 2
-        y = (A4_HEIGHT - img.height) // 2
-        page.paste(img, (x, y))
-        pages.append(page)
+        pages.append(img)
 
     if not pages:
         raise ValueError("No images provided.")
