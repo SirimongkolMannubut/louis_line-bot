@@ -487,6 +487,14 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         )
         return
 
+    if normalized in {"รายจ่ายทั้งหมด", "ดูรายจ่ายทั้งหมด"}:
+        _show_all_transactions(reply_token, user_id, "expense")
+        return
+
+    if normalized in {"รายรับทั้งหมด", "ดูรายรับทั้งหมด"}:
+        _show_all_transactions(reply_token, user_id, "income")
+        return
+
     if normalized in RECENT_COMMANDS:
         rows = get_recent_transactions(user_id)
         if not rows:
@@ -1158,21 +1166,31 @@ def _looks_like_slip(text: str) -> bool:
 
 
 # ── Finance helpers ─────────────────────────────────────────────────────────
-_EXPENSE_KEYWORDS = r"(รายจ่าย|จ่าย|ค่า|ใช้ไป|ซื้อ|expense)"
-_INCOME_KEYWORDS = r"(รายรับ|รับ|ได้รับ|โอนเข้า|income|เงินเดือน|ค่าจ้าง|โบนัส)"
 _AMOUNT_RE = re.compile(r"[\d,]+(?:\.\d+)?")
+
+# Pattern ที่ชัดเจน: คำสั่ง + ตัวเลข + (หมวด) ต้องไม่มีคำถามต่อท้าย
+_QUESTION_WORDS = re.compile(r"(ไหม|มั้ย|ไหมครับ|ไหมคะ|หรอ|หรือ|เท่าไร|เท่าไหร่|ใช่ไหม|รึเปล่า|\?)")
+
+# Expense: ต้องขึ้นต้นด้วยคำสั่งที่ชัดเจน + ตัวเลข
+_EXPENSE_PATTERN = re.compile(
+    r"^(รายจ่าย|จ่ายเงิน|ใช้ไป|บันทึกรายจ่าย|ค่า\S+|ซื้อ\S+)\s+[\d,]+"
+)
+# Income: ต้องขึ้นต้นด้วยคำสั่งที่ชัดเจน + ตัวเลข
+_INCOME_PATTERN = re.compile(
+    r"^(รายรับ|รับเงิน|ได้รับ|โอนเข้า|income|เงินเดือน|ค่าจ้าง|โบนัส|บันทึกรายรับ)\s+[\d,]+"
+)
 
 
 def _is_expense_text(text: str) -> bool:
-    has_kw = bool(re.search(_EXPENSE_KEYWORDS, text))
-    has_number = bool(_AMOUNT_RE.search(text))
-    return has_kw and has_number
+    if _QUESTION_WORDS.search(text):
+        return False
+    return bool(_EXPENSE_PATTERN.match(text))
 
 
 def _is_income_text(text: str) -> bool:
-    has_kw = bool(re.search(_INCOME_KEYWORDS, text))
-    has_number = bool(_AMOUNT_RE.search(text))
-    return has_kw and has_number
+    if _QUESTION_WORDS.search(text):
+        return False
+    return bool(_INCOME_PATTERN.match(text))
 
 
 def _extract_amount_category(raw_text: str, type_: str) -> tuple[float | None, str]:
@@ -1206,6 +1224,34 @@ def _extract_amount_category(raw_text: str, type_: str) -> tuple[float | None, s
             continue
 
     return None, text
+
+
+def _show_all_transactions(reply_token: str, user_id: str, type_: str) -> None:
+    with __import__('contextlib').suppress(Exception):
+        from core.db_service import get_conn
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM transactions WHERE user_id=? AND type=? ORDER BY id ASC",
+                (user_id, type_),
+            ).fetchall()
+        if not rows:
+            icon = "❤️" if type_ == "expense" else "💚"
+            reply_text(reply_token, f"{icon} ยังไม่มีรายการครับ")
+            return
+        icon = "❤️" if type_ == "expense" else "💚"
+        label = "รายจ่าย" if type_ == "expense" else "รายรับ"
+        lines = [f"📋 {label}ทั้งหมด\n"]
+        total = 0.0
+        for i, r in enumerate(rows, 1):
+            amt = r["amount"]
+            total += amt
+            cat = r["category"] or "-"
+            lines.append(f"{i}. {cat}  {amt:,.0f} บาท  ({r['date']})") 
+        lines.append(f"\n─" * 20)
+        lines.append(f"💰 รวม {total:,.2f} บาท")
+        reply_text(reply_token, "\n".join(lines))
+        return
+    reply_text(reply_token, "เกิดข้อผิดพลาดครับ")
 
 
 def _finance_help_msg(type_: str) -> str:
