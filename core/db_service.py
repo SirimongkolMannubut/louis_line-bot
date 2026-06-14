@@ -204,6 +204,43 @@ def get_recent_transactions(user_id: str, limit: int = 10) -> list:
         ).fetchall()
 
 
+def get_daily_summary(user_id: str, date: str) -> dict:
+    """สรุปรายรับ-รายจ่ายของวันที่กำหนด (date format: YYYY-MM-DD)"""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT type, SUM(amount) as total FROM transactions "
+            "WHERE user_id=? AND date=? GROUP BY type",
+            (user_id, date),
+        ).fetchall()
+    income = expense = 0.0
+    for r in rows:
+        if r["type"] == "income":
+            income = r["total"]
+        else:
+            expense = r["total"]
+    return {"income": income, "expense": expense, "balance": income - expense, "date": date}
+
+
+def get_daily_transactions(user_id: str, date: str) -> list:
+    """รายการทั้งหมดของวันที่กำหนด (date format: YYYY-MM-DD)"""
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM transactions WHERE user_id=? AND date=? ORDER BY id ASC",
+            (user_id, date),
+        ).fetchall()
+
+
+def get_expense_by_category(user_id: str, year: int, month: int) -> list:
+    """สรุปรายจ่ายแยกตามหมวดหมู่ของเดือน"""
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT category, SUM(amount) as total FROM transactions "
+            "WHERE user_id=? AND type='expense' AND substr(date,1,7)=? "
+            "GROUP BY category ORDER BY total DESC",
+            (user_id, f"{year:04d}-{month:02d}"),
+        ).fetchall()
+
+
 # ── Events ────────────────────────────────────────────────────────────────────
 def add_event(user_id: str, title: str, event_date: str, event_time: str = "") -> None:
     with get_conn() as conn:

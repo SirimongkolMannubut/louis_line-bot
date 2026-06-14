@@ -21,6 +21,9 @@ from core.brain import ask_ai, clear_chat_history
 from core.db_service import (
     add_event,
     add_transaction,
+    get_daily_summary,
+    get_daily_transactions,
+    get_expense_by_category,
     get_latest_slip_batch,
     get_monthly_summary,
     get_recent_transactions,
@@ -106,6 +109,21 @@ DOC_SUMMARY_COMMANDS = {
     "สรุปไฟล์",
     "สรุปงานวิจัย",
     "สรุปวิจัย",
+}
+DAILY_COMMANDS = {
+    "สรุปวันนี้",
+    "รายจ่ายวันนี้",
+    "รายรับวันนี้",
+    "ใช้จ่ายวันนี้",
+    "ดูวันนี้",
+    "วันนี้ใช้เท่าไหร่",
+    "วันนี้รับเท่าไหร่",
+}
+CATEGORY_COMMANDS = {
+    "สรุปหมวดหมู่",
+    "ดูหมวดหมู่",
+    "ใช้จ่ายแต่ละหมวด",
+    "รายจ่ายแต่ละหมวด",
 }
 SLIP_COMMANDS = {"บันทึกสลิป", "อ่านสลิป", "สแกนสลิป", "slip"}
 MULTI_SLIP_COMMANDS = {
@@ -500,6 +518,37 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         return
     if _is_expense_text(normalized):
         _handle_finance(reply_token, user_id, raw_text, "expense")
+        return
+
+    # ── Daily summary ──
+    if normalized in DAILY_COMMANDS:
+        _show_daily_summary(reply_token, user_id, datetime.now().strftime("%Y-%m-%d"))
+        return
+
+    # สรุปวันที่ DD/MM
+    _dm = re.match(r"^(สรุป|ดู|รายจ่าย|รายรับ)\s*(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{2,4}))?$", normalized)
+    if _dm:
+        _d, _mo = int(_dm.group(2)), int(_dm.group(3))
+        _yr = int(_dm.group(4)) if _dm.group(4) else datetime.now().year
+        if _yr < 100:
+            _yr += 2000
+        try:
+            _date_str = f"{_yr:04d}-{_mo:02d}-{_d:02d}"
+            _show_daily_summary(reply_token, user_id, _date_str)
+        except Exception:
+            reply_text(reply_token, "วันที่ไม่ถูกต้องครับ เช่น 'สรุป 15/7' หรือ 'สรุป 15/7/2025'")
+        return
+
+    if normalized in CATEGORY_COMMANDS:
+        now = datetime.now()
+        rows = get_expense_by_category(user_id, now.year, now.month)
+        if not rows:
+            reply_text(reply_token, "ยังไม่มีรายจ่ายเดือนนี้ครับ")
+            return
+        lines = ["📊 รายจ่ายแยกหมวดหมู่เดือนนี้\n"]
+        for r in rows:
+            lines.append(f"• {r['category'] or 'อื่นๆ'}: {r['total']:,.2f} บาท")
+        reply_text(reply_token, "\n".join(lines))
         return
 
     if normalized in SUMMARY_COMMANDS:
@@ -1539,6 +1588,30 @@ def build_welcome_message():
         "📝 'บันทึก ข้อความ' → จดบันทึก\n\n"
         "พิมพ์ 'เมนู' เพื่อดูทุกฟีเจอร์ หรือถามได้เลยครับ 💬"
     )
+
+
+def _show_daily_summary(reply_token: str, user_id: str, date: str) -> None:
+    s = get_daily_summary(user_id, date)
+    rows = get_daily_transactions(user_id, date)
+    try:
+        y, mo, d = date.split("-")
+        display_date = f"{int(d):02d}/{int(mo):02d}/{y}"
+    except Exception:
+        display_date = date
+    if not rows:
+        reply_text(reply_token, f"📅 {display_date}\nยังไม่มีรายการครับ")
+        return
+    lines = [f"📅 สรุปวันที่ {display_date}\n"]
+    if s["income"] > 0:
+        lines.append(f"💚 รายรับ:  {s['income']:,.2f} บาท")
+    if s["expense"] > 0:
+        lines.append(f"❤️ รายจ่าย: {s['expense']:,.2f} บาท")
+    lines.append(f"💰 คงเหลือ:  {s['balance']:,.2f} บาท")
+    lines.append("\n─ รายการ ─")
+    for r in rows:
+        icon = "💚" if r["type"] == "income" else "❤️"
+        lines.append(f"{icon} {r['category'] or '-'}  {r['amount']:,.2f} บาท")
+    reply_text(reply_token, "\n".join(lines))
 
 
 def build_help_message():
