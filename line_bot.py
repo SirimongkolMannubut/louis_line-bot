@@ -970,7 +970,6 @@ def _process_and_summarize_slips(
 
         # fallback: ถ้า slip_data ยังไม่ครบ (session เก่าแบบที่ไม่มี slip_data)
         if len(slip_data) < len(images):
-            reply_text(reply_token, "⏳ กำลังอ่านสลิปที่ยังไม่ได้อ่าน... รอสักครู่ครับ")
             missing = images[len(slip_data) :]
             for img_path in missing:
                 try:
@@ -1032,8 +1031,6 @@ def _process_and_summarize_receipts(reply_token: str, session_key: str) -> None:
     session = get_session(session_key)
     images = session.get("images", [])
 
-    reply_text(reply_token, "⏳ กำลังอ่านเอกสาร... รอสักครู่ครับ")
-
     summaries: list[str] = []
     for img_path in images:
         try:
@@ -1060,8 +1057,6 @@ def _process_and_summarize_docs(reply_token: str, session_key: str, summary_type
     """อ่านเอกสารทั้งหมดด้วย OCR -> สรุปด้วย AI ตามรูปแบบ -> ถามความต้องการสร้าง PDF"""
     session = get_session(session_key)
     images = session.get("images", [])
-
-    reply_text(reply_token, "⏳ กำลังประมวลผลสรุปเอกสาร... รอสักครู่ครับ")
 
     # 1. OCR ทุกรูปภาพและนำข้อความมารวมกัน
     all_texts = []
@@ -1111,8 +1106,6 @@ def _create_confirmed_pdf(
         clear_session(session_key)
         reply_text(reply_token, "⚠️ ไม่พบรูปเพื่อสร้าง PDF ครับ")
         return
-
-    reply_text(reply_token, "⏳ กำลังสร้าง PDF... รอสักครู่ครับ")
 
     from datetime import datetime as _dt
 
@@ -2699,7 +2692,6 @@ def handle_document_file_message(reply_token: str, session_key: str, message_id:
 
 
 def _summarize_extracted_text(reply_token: str, session_key: str, document_text: str, summary_type: str) -> None:
-    reply_text(reply_token, "⏳ กำลังประมวลผลสรุปเนื้อหาเอกสาร... รอสักครู่ครับ")
     summary = summarize_document_text(document_text, summary_type)
     mode_title = summary_type if summary_type in {"สรุปแบบสั้น", "สรุปแบบละเอียด", "สรุปเพื่อสอบ", "สรุปเป็นข้อ", "สรุปเป็น mind map"} else "สรุปแบบละเอียด"
     msg = (
