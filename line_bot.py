@@ -1896,32 +1896,25 @@ def reply_submenu(reply_token, category: str) -> bool:
     cat = category.strip().lower()
     
     title = ""
-    subtitle = ""
-    desc = ""
+    subtitle = "เลือกฟังก์ชันที่ต้องการ"
     buttons = []
     
     if cat in {"เอกสาร", "document"}:
-        title = "📄 เมนูจัดการเอกสาร"
-        subtitle = "AI Assistant & PDF Tools"
-        desc = "สรุปเอกสาร อ่านบิลใบเสร็จ หรือรวมรูปภาพเป็น PDF"
+        title = "📄 เมนูเอกสาร"
         buttons = [
-            {"label": "📚 สรุปเอกสาร", "text": "สรุปเอกสาร"},
+            {"label": "📝 สรุปเอกสาร", "text": "สรุปเอกสาร"},
             {"label": "🧾 สรุปใบเสร็จ", "text": "สรุปใบเสร็จ"},
             {"label": "📄 ทำ PDF", "text": "ทำ PDF"}
         ]
     elif cat in {"สลิป", "slip"}:
-        title = "🧾 เมนูจัดการสลิป"
-        subtitle = "Scan & Track Financial Slips"
-        desc = "ส่งรูปภาพสลิปโอนเงินเข้ามาในห้องแชทได้ทันที ระบบจะสแกนและบันทึกยอดให้อัตโนมัติ"
+        title = "🧾 เมนูสลิป"
         buttons = [
             {"label": "💸 รวมยอดหลายสลิป", "text": "รวมสลิป"},
             {"label": "📊 ดูประวัติสลิปทั้งหมด", "text": "ดูสลิปทั้งหมด"},
             {"label": "📊 ยอดรวมสลิปล่าสุด", "text": "ยอดรวมสลิป"}
         ]
     elif cat in {"การเงิน", "finance"}:
-        title = "💰 บันทึกการเงิน"
-        subtitle = "Personal Expense Tracker"
-        desc = "วิธีพิมพ์บันทึกด่วน:\n• ค่าน้ำ 270 (บันทึกรายจ่าย)\n• เงินเดือน 15000 (บันทึกรายรับ)"
+        title = "💰 เมนูการเงิน"
         buttons = [
             {"label": "📊 สรุปยอดเดือนนี้", "text": "สรุปเดือนนี้"},
             {"label": "📊 สรุปยอดวันนี้", "text": "สรุปวันนี้"},
@@ -1930,35 +1923,27 @@ def reply_submenu(reply_token, category: str) -> bool:
             {"label": "🗑️ ลบข้อมูลทั้งหมด", "text": "ลบรายจ่ายทั้งหมด"}
         ]
     elif cat in {"นัดหมาย", "schedule"}:
-        title = "📅 นัดหมาย & บันทึก"
-        subtitle = "Schedule & Personal Notes"
-        desc = "วิธีพิมพ์บันทึกด่วน:\n• นัด ประชุม 2026-07-20 09:00\n• บันทึก ซื้อนมเย็น (จดบันทึกสั้น)"
+        title = "📅 เมนูนัดหมาย"
         buttons = [
             {"label": "📅 ตารางนัดหมายทั้งหมด", "text": "ดูนัดหมาย"},
             {"label": "📝 ดูบันทึกย่อทั้งหมด", "text": "ดูบันทึก"},
             {"label": "🗑️ ลบประวัติบันทึกทั้งหมด", "text": "ลบบันทึก"}
         ]
     elif cat in {"โปรไฟล์", "profile"}:
-        title = "👤 ข้อมูลส่วนตัว"
-        subtitle = "Your Personal Profile"
-        desc = "วิธีตั้งค่าโปรไฟล์:\n• เปลี่ยนชื่อเป็น [ชื่อใหม่]\n• เปลี่ยนอายุเป็น [อายุใหม่]\n• เปลี่ยนอาชีพเป็น [อาชีพใหม่]"
+        title = "👤 เมนูโปรไฟล์"
         buttons = [
             {"label": "👤 ดูข้อมูลโปรไฟล์ของฉัน", "text": "ข้อมูลของฉัน"},
             {"label": "🗑️ ลบข้อมูลโปรไฟล์ทั้งหมด", "text": "ล้างข้อมูลของฉัน"}
         ]
     elif cat in {"เครื่องมือ", "tools", "⚙️"}:
-        title = "⚙️ เครื่องมือและบริการ"
-        subtitle = "System Utilities"
-        desc = "• ส่งไฟล์เสียง / อัดเสียงระบบ เพื่อแปลงเป็นข้อความได้\n• พิมพ์: แปล [ข้อความที่ต้องการแปลภาษาอังกฤษ]"
+        title = "⚙️ เมนูเครื่องมือ"
         buttons = [
             {"label": "📄 สร้างไฟล์ PDF จากรูปภาพ", "text": "ทำ PDF"},
             {"label": "🎤 ถอดรหัสข้อความจากเสียง", "text": "แปลงเสียง"},
             {"label": "🧹 ล้างประวัติสนทนากับ AI", "text": "ล้างแชท"}
         ]
     elif cat in {"ai assistant", "ai", "🌐"}:
-        title = "🌐 ผู้ช่วยปัญญาประดิษฐ์ AI"
-        subtitle = "Smart Conversational AI"
-        desc = "พิมพ์ถามข้อมูล เรื่องที่อยากรู้ หรือให้สรุปบทเรียนได้ตามต้องการ บอทจะตอบคำถามในห้องแชทโดยตรง"
+        title = "🌐 AI Assistant"
         buttons = [
             {"label": "🧹 ล้างประวัติแชท/ความจำ AI", "text": "ล้างแชท"}
         ]
@@ -1968,15 +1953,27 @@ def reply_submenu(reply_token, category: str) -> bool:
     flex_buttons = []
     for btn in buttons:
         flex_buttons.append({
-            "type": "button",
-            "style": "primary",
-            "color": "#2ECC71",
-            "height": "sm",
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#2ECC71",
+            "cornerRadius": "md",
+            "paddingTop": "8px",
+            "paddingBottom": "8px",
+            "alignItems": "center",
             "action": {
                 "type": "message",
                 "label": btn["label"],
                 "text": btn["text"]
-            }
+            },
+            "contents": [
+                {
+                    "type": "text",
+                    "text": btn["label"],
+                    "color": "#FFFFFF",
+                    "weight": "bold",
+                    "size": "sm"
+                }
+            ]
         })
         
     contents = {
@@ -1995,68 +1992,44 @@ def reply_submenu(reply_token, category: str) -> bool:
             "cornerRadius": "20px",
             "borderColor": "#EAEAEA",
             "borderWidth": "1px",
-            "paddingAll": "20px",
+            "paddingAll": "16px",
             "contents": [
               {
                 "type": "box",
                 "layout": "vertical",
-                "spacing": "xs",
+                "paddingBottom": "8px",
                 "contents": [
                   {
                     "type": "text",
                     "text": title,
                     "weight": "bold",
-                    "size": "xl",
+                    "size": "lg",
                     "color": "#333333"
                   },
                   {
                     "type": "text",
                     "text": subtitle,
                     "size": "xs",
-                    "color": "#777777"
+                    "color": "#777777",
+                    "margin": "xs"
                   }
                 ]
               },
               {
                 "type": "separator",
-                "margin": "md",
                 "color": "#EAEAEA"
-              },
-              {
-                "type": "text",
-                "text": "💡 รายละเอียด / วิธีใช้งาน",
-                "weight": "bold",
-                "size": "sm",
-                "color": "#333333",
-                "margin": "lg"
-              },
-              {
-                "type": "text",
-                "text": desc,
-                "size": "xs",
-                "color": "#777777",
-                "margin": "sm",
-                "wrap": True
-              },
-              {
-                "type": "text",
-                "text": "⚙️ ฟังก์ชันที่เกี่ยวข้อง",
-                "weight": "bold",
-                "size": "sm",
-                "color": "#333333",
-                "margin": "lg"
               },
               {
                 "type": "box",
                 "layout": "vertical",
-                "spacing": "sm",
-                "margin": "md",
+                "spacing": "xs",
+                "margin": "sm",
                 "contents": flex_buttons
               },
               {
                 "type": "box",
                 "layout": "vertical",
-                "margin": "lg",
+                "margin": "md",
                 "spacing": "xs",
                 "contents": [
                   {
@@ -2064,15 +2037,43 @@ def reply_submenu(reply_token, category: str) -> bool:
                     "color": "#EAEAEA"
                   },
                   {
-                    "type": "button",
-                    "style": "link",
-                    "height": "sm",
-                    "color": "#777777",
+                    "type": "box",
+                    "layout": "vertical",
+                    "borderWidth": "1px",
+                    "borderColor": "#EAEAEA",
+                    "cornerRadius": "md",
+                    "paddingTop": "6px",
+                    "paddingBottom": "6px",
+                    "alignItems": "center",
+                    "margin": "sm",
                     "action": {
                       "type": "message",
-                      "label": "🔙 กลับสู่เมนูหลัก",
+                      "label": "⬅️ กลับเมนูหลัก",
                       "text": "เมนู"
-                    }
+                    },
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "⬅️ กลับเมนูหลัก",
+                        "color": "#777777",
+                        "weight": "bold",
+                        "size": "xs"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "separator",
+                    "color": "#EAEAEA",
+                    "margin": "sm"
+                  },
+                  {
+                    "type": "text",
+                    "text": "👉 แตะปุ่มเพื่อเริ่มใช้งาน",
+                    "size": "xxs",
+                    "color": "#777777",
+                    "align": "center",
+                    "margin": "sm",
+                    "wrap": True
                   }
                 ]
               }
@@ -2136,31 +2137,31 @@ def reply_main_menu(reply_token):
             "cornerRadius": "20px",
             "borderColor": "#EAEAEA",
             "borderWidth": "1px",
-            "paddingAll": "20px",
+            "paddingAll": "16px",
             "contents": [
               {
                 "type": "box",
                 "layout": "vertical",
-                "spacing": "xs",
+                "paddingBottom": "8px",
                 "contents": [
                   {
                     "type": "text",
                     "text": "🤖 LouisAI PDF Bot",
                     "weight": "bold",
-                    "size": "xl",
+                    "size": "lg",
                     "color": "#333333"
                   },
                   {
                     "type": "text",
-                    "text": "AI Assistant & PDF Tools",
+                    "text": "AI เอกสาร • PDF • การเงิน",
                     "size": "xs",
-                    "color": "#777777"
+                    "color": "#777777",
+                    "margin": "xs"
                   }
                 ]
               },
               {
                 "type": "separator",
-                "margin": "md",
                 "color": "#EAEAEA"
               },
               {
@@ -2169,68 +2170,128 @@ def reply_main_menu(reply_token):
                 "weight": "bold",
                 "size": "sm",
                 "color": "#333333",
-                "margin": "lg"
+                "margin": "md"
               },
               {
                 "type": "box",
                 "layout": "vertical",
-                "spacing": "sm",
-                "margin": "md",
+                "spacing": "xs",
+                "margin": "sm",
                 "contents": [
                   {
-                    "type": "button",
-                    "style": "primary",
-                    "color": "#2ECC71",
-                    "height": "sm",
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#2ECC71",
+                    "cornerRadius": "md",
+                    "paddingTop": "8px",
+                    "paddingBottom": "8px",
+                    "alignItems": "center",
                     "action": {
                       "type": "message",
                       "label": "📝 สรุปเอกสาร",
                       "text": "สรุปเอกสาร"
-                    }
+                    },
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "📝 สรุปเอกสาร",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "sm"
+                      }
+                    ]
                   },
                   {
-                    "type": "button",
-                    "style": "primary",
-                    "color": "#2ECC71",
-                    "height": "sm",
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#2ECC71",
+                    "cornerRadius": "md",
+                    "paddingTop": "8px",
+                    "paddingBottom": "8px",
+                    "alignItems": "center",
                     "action": {
                       "type": "message",
                       "label": "🧾 สรุปใบเสร็จ",
                       "text": "สรุปใบเสร็จ"
-                    }
+                    },
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "🧾 สรุปใบเสร็จ",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "sm"
+                      }
+                    ]
                   },
                   {
-                    "type": "button",
-                    "style": "primary",
-                    "color": "#2ECC71",
-                    "height": "sm",
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#2ECC71",
+                    "cornerRadius": "md",
+                    "paddingTop": "8px",
+                    "paddingBottom": "8px",
+                    "alignItems": "center",
                     "action": {
                       "type": "message",
                       "label": "📄 ทำ PDF",
                       "text": "ทำ PDF"
-                    }
+                    },
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "📄 ทำ PDF",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "sm"
+                      }
+                    ]
                   },
                   {
-                    "type": "button",
-                    "style": "primary",
-                    "color": "#2ECC71",
-                    "height": "sm",
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#2ECC71",
+                    "cornerRadius": "md",
+                    "paddingTop": "8px",
+                    "paddingBottom": "8px",
+                    "alignItems": "center",
                     "action": {
                       "type": "message",
                       "label": "📸 รวมสลิป",
                       "text": "รวมสลิป"
-                    }
+                    },
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "📸 รวมสลิป",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "sm"
+                      }
+                    ]
                   },
                   {
-                    "type": "button",
-                    "style": "primary",
-                    "color": "#2ECC71",
-                    "height": "sm",
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#2ECC71",
+                    "cornerRadius": "md",
+                    "paddingTop": "8px",
+                    "paddingBottom": "8px",
+                    "alignItems": "center",
                     "action": {
                       "type": "message",
                       "label": "🎙️ แปลงเสียง",
                       "text": "แปลงเสียง"
-                    }
+                    },
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "🎙️ แปลงเสียง",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "sm"
+                      }
+                    ]
                   }
                 ]
               },
@@ -2240,18 +2301,18 @@ def reply_main_menu(reply_token):
                 "weight": "bold",
                 "size": "sm",
                 "color": "#333333",
-                "margin": "lg"
+                "margin": "md"
               },
               {
                 "type": "box",
                 "layout": "vertical",
-                "spacing": "sm",
-                "margin": "md",
+                "spacing": "xs",
+                "margin": "sm",
                 "contents": [
                   {
                     "type": "box",
                     "layout": "horizontal",
-                    "spacing": "sm",
+                    "spacing": "xs",
                     "contents": [
                       {
                         "type": "box",
@@ -2259,7 +2320,8 @@ def reply_main_menu(reply_token):
                         "borderWidth": "1px",
                         "borderColor": "#EAEAEA",
                         "cornerRadius": "md",
-                        "paddingAll": "sm",
+                        "paddingTop": "8px",
+                        "paddingBottom": "8px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -2271,7 +2333,6 @@ def reply_main_menu(reply_token):
                           {
                             "type": "text",
                             "text": "📁 เอกสาร",
-                            "align": "center",
                             "weight": "bold",
                             "color": "#333333",
                             "size": "xs"
@@ -2284,7 +2345,8 @@ def reply_main_menu(reply_token):
                         "borderWidth": "1px",
                         "borderColor": "#EAEAEA",
                         "cornerRadius": "md",
-                        "paddingAll": "sm",
+                        "paddingTop": "8px",
+                        "paddingBottom": "8px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -2296,7 +2358,6 @@ def reply_main_menu(reply_token):
                           {
                             "type": "text",
                             "text": "💰 การเงิน",
-                            "align": "center",
                             "weight": "bold",
                             "color": "#333333",
                             "size": "xs"
@@ -2308,7 +2369,7 @@ def reply_main_menu(reply_token):
                   {
                     "type": "box",
                     "layout": "horizontal",
-                    "spacing": "sm",
+                    "spacing": "xs",
                     "contents": [
                       {
                         "type": "box",
@@ -2316,7 +2377,8 @@ def reply_main_menu(reply_token):
                         "borderWidth": "1px",
                         "borderColor": "#EAEAEA",
                         "cornerRadius": "md",
-                        "paddingAll": "sm",
+                        "paddingTop": "8px",
+                        "paddingBottom": "8px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -2328,7 +2390,6 @@ def reply_main_menu(reply_token):
                           {
                             "type": "text",
                             "text": "🎫 สลิป",
-                            "align": "center",
                             "weight": "bold",
                             "color": "#333333",
                             "size": "xs"
@@ -2341,7 +2402,8 @@ def reply_main_menu(reply_token):
                         "borderWidth": "1px",
                         "borderColor": "#EAEAEA",
                         "cornerRadius": "md",
-                        "paddingAll": "sm",
+                        "paddingTop": "8px",
+                        "paddingBottom": "8px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -2353,7 +2415,6 @@ def reply_main_menu(reply_token):
                           {
                             "type": "text",
                             "text": "📅 นัดหมาย",
-                            "align": "center",
                             "weight": "bold",
                             "color": "#333333",
                             "size": "xs"
@@ -2365,7 +2426,7 @@ def reply_main_menu(reply_token):
                   {
                     "type": "box",
                     "layout": "horizontal",
-                    "spacing": "sm",
+                    "spacing": "xs",
                     "contents": [
                       {
                         "type": "box",
@@ -2373,7 +2434,8 @@ def reply_main_menu(reply_token):
                         "borderWidth": "1px",
                         "borderColor": "#EAEAEA",
                         "cornerRadius": "md",
-                        "paddingAll": "sm",
+                        "paddingTop": "8px",
+                        "paddingBottom": "8px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -2385,7 +2447,6 @@ def reply_main_menu(reply_token):
                           {
                             "type": "text",
                             "text": "👤 โปรไฟล์",
-                            "align": "center",
                             "weight": "bold",
                             "color": "#333333",
                             "size": "xs"
@@ -2398,7 +2459,8 @@ def reply_main_menu(reply_token):
                         "borderWidth": "1px",
                         "borderColor": "#EAEAEA",
                         "cornerRadius": "md",
-                        "paddingAll": "sm",
+                        "paddingTop": "8px",
+                        "paddingBottom": "8px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -2410,7 +2472,6 @@ def reply_main_menu(reply_token):
                           {
                             "type": "text",
                             "text": "⚙️ เครื่องมือ",
-                            "align": "center",
                             "weight": "bold",
                             "color": "#333333",
                             "size": "xs"
@@ -2425,7 +2486,8 @@ def reply_main_menu(reply_token):
                     "borderWidth": "1px",
                     "borderColor": "#EAEAEA",
                     "cornerRadius": "md",
-                    "paddingAll": "sm",
+                    "paddingTop": "8px",
+                    "paddingBottom": "8px",
                     "alignItems": "center",
                     "justifyContent": "center",
                     "action": {
@@ -2437,7 +2499,6 @@ def reply_main_menu(reply_token):
                       {
                         "type": "text",
                         "text": "🌐 AI Assistant",
-                        "align": "center",
                         "weight": "bold",
                         "color": "#333333",
                         "size": "xs"
@@ -2449,7 +2510,7 @@ def reply_main_menu(reply_token):
               {
                 "type": "box",
                 "layout": "vertical",
-                "margin": "lg",
+                "margin": "md",
                 "spacing": "xs",
                 "contents": [
                   {
@@ -2458,11 +2519,11 @@ def reply_main_menu(reply_token):
                   },
                   {
                     "type": "text",
-                    "text": "👉 พิมพ์ชื่อเมนูเพื่อใช้งาน หรือกดปุ่มด้านบน",
+                    "text": "👉 แตะปุ่มเพื่อเริ่มใช้งาน",
                     "size": "xxs",
                     "color": "#777777",
                     "align": "center",
-                    "margin": "md",
+                    "margin": "sm",
                     "wrap": True
                   }
                 ]
