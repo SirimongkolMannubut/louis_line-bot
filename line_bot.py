@@ -277,7 +277,7 @@ def handle_event(event: dict[str, Any], request: Request) -> None:
                 "หากต้องการสรุปเนื้อหา กรุณาส่งเป็นไฟล์ PDF, Word (.docx) หรือรูปภาพแทนนะครับ"
             )
     else:
-        reply_text(reply_token, build_help_message())
+        reply_main_menu(reply_token)
 
 
 # ── Text ──────────────────────────────────────────────────────────────────────
@@ -301,7 +301,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         return
 
     if normalized in HELP_COMMANDS:
-        reply_text(reply_token, build_help_message())
+        reply_main_menu(reply_token)
         return
 
     # ── ตรวจ waiting states ก่อน routing เมนู ──
@@ -1892,6 +1892,391 @@ def reply_pdf_success(reply_token, title, safe_name, detail_text, file_url):
             reply_text(reply_token, fallback_text)
         except Exception as fallback_err:
             print(f"[LINE] Fallback reply_text also failed: {fallback_err}")
+
+
+def reply_main_menu(reply_token):
+    alt_text = "🤖 LouisAI PDF Bot - เมนูหลัก"
+    contents = {
+      "type": "bubble",
+      "size": "mega",
+      "body": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#F8F9FA",
+        "paddingAll": "12px",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#FFFFFF",
+            "cornerRadius": "20px",
+            "borderColor": "#EAEAEA",
+            "borderWidth": "1px",
+            "paddingAll": "20px",
+            "contents": [
+              {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "xs",
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": "🤖 LouisAI PDF Bot",
+                    "weight": "bold",
+                    "size": "xl",
+                    "color": "#333333"
+                  },
+                  {
+                    "type": "text",
+                    "text": "AI Assistant & PDF Tools",
+                    "size": "xs",
+                    "color": "#777777"
+                  }
+                ]
+              },
+              {
+                "type": "separator",
+                "margin": "md",
+                "color": "#EAEAEA"
+              },
+              {
+                "type": "text",
+                "text": "⭐ ฟังก์ชันยอดนิยม",
+                "weight": "bold",
+                "size": "sm",
+                "color": "#333333",
+                "margin": "lg"
+              },
+              {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "sm",
+                "margin": "md",
+                "contents": [
+                  {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#2ECC71",
+                    "height": "sm",
+                    "action": {
+                      "type": "message",
+                      "label": "📝 สรุปเอกสาร",
+                      "text": "สรุปเอกสาร"
+                    }
+                  },
+                  {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#2ECC71",
+                    "height": "sm",
+                    "action": {
+                      "type": "message",
+                      "label": "🧾 สรุปใบเสร็จ",
+                      "text": "สรุปใบเสร็จ"
+                    }
+                  },
+                  {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#2ECC71",
+                    "height": "sm",
+                    "action": {
+                      "type": "message",
+                      "label": "📄 ทำ PDF",
+                      "text": "ทำ PDF"
+                    }
+                  },
+                  {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#2ECC71",
+                    "height": "sm",
+                    "action": {
+                      "type": "message",
+                      "label": "📸 รวมสลิป",
+                      "text": "รวมสลิป"
+                    }
+                  },
+                  {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#2ECC71",
+                    "height": "sm",
+                    "action": {
+                      "type": "message",
+                      "label": "🎙️ แปลงเสียง",
+                      "text": "แปลงเสียง"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": "📂 บริการอื่นๆ",
+                "weight": "bold",
+                "size": "sm",
+                "color": "#333333",
+                "margin": "lg"
+              },
+              {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "sm",
+                "margin": "md",
+                "contents": [
+                  {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "spacing": "sm",
+                    "contents": [
+                      {
+                        "type": "box",
+                        "layout": "vertical",
+                        "borderWidth": "1px",
+                        "borderColor": "#EAEAEA",
+                        "cornerRadius": "md",
+                        "paddingAll": "sm",
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                        "action": {
+                          "type": "message",
+                          "label": "📁 เอกสาร",
+                          "text": "เอกสาร"
+                        },
+                        "contents": [
+                          {
+                            "type": "text",
+                            "text": "📁 เอกสาร",
+                            "align": "center",
+                            "weight": "bold",
+                            "color": "#333333",
+                            "size": "xs"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "box",
+                        "layout": "vertical",
+                        "borderWidth": "1px",
+                        "borderColor": "#EAEAEA",
+                        "cornerRadius": "md",
+                        "paddingAll": "sm",
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                        "action": {
+                          "type": "message",
+                          "label": "💰 การเงิน",
+                          "text": "การเงิน"
+                        },
+                        "contents": [
+                          {
+                            "type": "text",
+                            "text": "💰 การเงิน",
+                            "align": "center",
+                            "weight": "bold",
+                            "color": "#333333",
+                            "size": "xs"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "spacing": "sm",
+                    "contents": [
+                      {
+                        "type": "box",
+                        "layout": "vertical",
+                        "borderWidth": "1px",
+                        "borderColor": "#EAEAEA",
+                        "cornerRadius": "md",
+                        "paddingAll": "sm",
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                        "action": {
+                          "type": "message",
+                          "label": "🎫 สลิป",
+                          "text": "สลิป"
+                        },
+                        "contents": [
+                          {
+                            "type": "text",
+                            "text": "🎫 สลิป",
+                            "align": "center",
+                            "weight": "bold",
+                            "color": "#333333",
+                            "size": "xs"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "box",
+                        "layout": "vertical",
+                        "borderWidth": "1px",
+                        "borderColor": "#EAEAEA",
+                        "cornerRadius": "md",
+                        "paddingAll": "sm",
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                        "action": {
+                          "type": "message",
+                          "label": "📅 นัดหมาย",
+                          "text": "นัดหมาย"
+                        },
+                        "contents": [
+                          {
+                            "type": "text",
+                            "text": "📅 นัดหมาย",
+                            "align": "center",
+                            "weight": "bold",
+                            "color": "#333333",
+                            "size": "xs"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "spacing": "sm",
+                    "contents": [
+                      {
+                        "type": "box",
+                        "layout": "vertical",
+                        "borderWidth": "1px",
+                        "borderColor": "#EAEAEA",
+                        "cornerRadius": "md",
+                        "paddingAll": "sm",
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                        "action": {
+                          "type": "message",
+                          "label": "👤 โปรไฟล์",
+                          "text": "โปรไฟล์"
+                        },
+                        "contents": [
+                          {
+                            "type": "text",
+                            "text": "👤 โปรไฟล์",
+                            "align": "center",
+                            "weight": "bold",
+                            "color": "#333333",
+                            "size": "xs"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "box",
+                        "layout": "vertical",
+                        "borderWidth": "1px",
+                        "borderColor": "#EAEAEA",
+                        "cornerRadius": "md",
+                        "paddingAll": "sm",
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                        "action": {
+                          "type": "message",
+                          "label": "⚙️ เครื่องมือ",
+                          "text": "เครื่องมือ"
+                        },
+                        "contents": [
+                          {
+                            "type": "text",
+                            "text": "⚙️ เครื่องมือ",
+                            "align": "center",
+                            "weight": "bold",
+                            "color": "#333333",
+                            "size": "xs"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "box",
+                    "layout": "vertical",
+                    "borderWidth": "1px",
+                    "borderColor": "#EAEAEA",
+                    "cornerRadius": "md",
+                    "paddingAll": "sm",
+                    "alignItems": "center",
+                    "justifyContent": "center",
+                    "action": {
+                      "type": "message",
+                      "label": "🌐 AI Assistant",
+                      "text": "AI Assistant"
+                    },
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "🌐 AI Assistant",
+                        "align": "center",
+                        "weight": "bold",
+                        "color": "#333333",
+                        "size": "xs"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "box",
+                "layout": "vertical",
+                "margin": "lg",
+                "spacing": "xs",
+                "contents": [
+                  {
+                    "type": "separator",
+                    "color": "#EAEAEA"
+                  },
+                  {
+                    "type": "text",
+                    "text": "👉 พิมพ์ชื่อเมนูเพื่อใช้งาน หรือกดปุ่มด้านบน",
+                    "size": "xxs",
+                    "color": "#777777",
+                    "align": "center",
+                    "margin": "md",
+                    "wrap": True
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+    try:
+        res = requests.post(
+            LINE_REPLY_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "replyToken": reply_token,
+                "messages": [
+                    {
+                        "type": "flex",
+                        "altText": alt_text,
+                        "contents": contents
+                    }
+                ],
+            },
+            timeout=30,
+        )
+        if res.status_code != 200:
+            print(f"[LINE] Main menu Flex message failed with status {res.status_code}: {res.text}")
+        res.raise_for_status()
+    except Exception as e:
+        print(f"[LINE] Main menu Flex exception: {e}. Falling back to text.")
+        try:
+            reply_text(reply_token, build_help_message())
+        except Exception as fallback_err:
+            print(f"[LINE] Main menu fallback reply_text also failed: {fallback_err}")
 
 
 def build_file_url(request, filename):
