@@ -1199,6 +1199,16 @@ def _looks_like_slip(text: str) -> bool:
     """ตรวจว่าข้อความ OCR น่าจะเป็นสลิปโอนเงินหรือไม่"""
     if not text:
         return False
+    
+    # ถ้ามีคำที่บ่งบอกว่าเป็นบิล/ใบส่งของ/ใบกำกับภาษีเชิงการค้า ไม่ควรจัดว่าเป็นสลิปโอนเงิน
+    lower_text = text.lower()
+    bill_keywords = [
+        "บิลเงินสด", "ใบส่งของ", "ใบกำกับภาษี", "tax invoice", "cash sale",
+        "เลขประจำตัวผู้เสียภาษี", "tax id", "หน่วยละ", "ผู้รับเงิน", "collector"
+    ]
+    if any(kw in lower_text for kw in bill_keywords):
+        return False
+
     slip_keywords = [
         "โอน",
         "transfer",
@@ -1213,7 +1223,7 @@ def _looks_like_slip(text: str) -> bool:
         "ยอดเงิน",
         "จ่ายเงิน",
     ]
-    hit = sum(1 for kw in slip_keywords if kw in text.lower())
+    hit = sum(1 for kw in slip_keywords if kw in lower_text)
     has_number = bool(_AMOUNT_RE.search(text))
     return hit >= 2 and has_number
 
