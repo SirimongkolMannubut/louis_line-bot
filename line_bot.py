@@ -332,9 +332,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         return
 
     # ── Sub-menu Routing ──
-    submenu_msg = build_submenu_message(normalized)
-    if submenu_msg:
-        reply_text(reply_token, submenu_msg)
+    if reply_submenu(reply_token, normalized):
         return
 
     # ── User Profile ──
@@ -1892,6 +1890,232 @@ def reply_pdf_success(reply_token, title, safe_name, detail_text, file_url):
             reply_text(reply_token, fallback_text)
         except Exception as fallback_err:
             print(f"[LINE] Fallback reply_text also failed: {fallback_err}")
+
+
+def reply_submenu(reply_token, category: str) -> bool:
+    cat = category.strip().lower()
+    
+    title = ""
+    subtitle = ""
+    desc = ""
+    buttons = []
+    
+    if cat in {"เอกสาร", "document"}:
+        title = "📄 เมนูจัดการเอกสาร"
+        subtitle = "AI Assistant & PDF Tools"
+        desc = "สรุปเอกสาร อ่านบิลใบเสร็จ หรือรวมรูปภาพเป็น PDF"
+        buttons = [
+            {"label": "📚 สรุปเอกสาร", "text": "สรุปเอกสาร"},
+            {"label": "🧾 สรุปใบเสร็จ", "text": "สรุปใบเสร็จ"},
+            {"label": "📄 ทำ PDF", "text": "ทำ PDF"}
+        ]
+    elif cat in {"สลิป", "slip"}:
+        title = "🧾 เมนูจัดการสลิป"
+        subtitle = "Scan & Track Financial Slips"
+        desc = "ส่งรูปภาพสลิปโอนเงินเข้ามาในห้องแชทได้ทันที ระบบจะสแกนและบันทึกยอดให้อัตโนมัติ"
+        buttons = [
+            {"label": "💸 รวมยอดหลายสลิป", "text": "รวมสลิป"},
+            {"label": "📊 ดูประวัติสลิปทั้งหมด", "text": "ดูสลิปทั้งหมด"},
+            {"label": "📊 ยอดรวมสลิปล่าสุด", "text": "ยอดรวมสลิป"}
+        ]
+    elif cat in {"การเงิน", "finance"}:
+        title = "💰 บันทึกการเงิน"
+        subtitle = "Personal Expense Tracker"
+        desc = "วิธีพิมพ์บันทึกด่วน:\n• ค่าน้ำ 270 (บันทึกรายจ่าย)\n• เงินเดือน 15000 (บันทึกรายรับ)"
+        buttons = [
+            {"label": "📊 สรุปยอดเดือนนี้", "text": "สรุปเดือนนี้"},
+            {"label": "📊 สรุปยอดวันนี้", "text": "สรุปวันนี้"},
+            {"label": "📊 รายจ่ายแยกหมวดหมู่", "text": "สรุปหมวดหมู่"},
+            {"label": "⏳ ประวัติ 10 รายการล่าสุด", "text": "รายการล่าสุด"},
+            {"label": "🗑️ ลบข้อมูลทั้งหมด", "text": "ลบรายจ่ายทั้งหมด"}
+        ]
+    elif cat in {"นัดหมาย", "schedule"}:
+        title = "📅 นัดหมาย & บันทึก"
+        subtitle = "Schedule & Personal Notes"
+        desc = "วิธีพิมพ์บันทึกด่วน:\n• นัด ประชุม 2026-07-20 09:00\n• บันทึก ซื้อนมเย็น (จดบันทึกสั้น)"
+        buttons = [
+            {"label": "📅 ตารางนัดหมายทั้งหมด", "text": "ดูนัดหมาย"},
+            {"label": "📝 ดูบันทึกย่อทั้งหมด", "text": "ดูบันทึก"},
+            {"label": "🗑️ ลบประวัติบันทึกทั้งหมด", "text": "ลบบันทึก"}
+        ]
+    elif cat in {"โปรไฟล์", "profile"}:
+        title = "👤 ข้อมูลส่วนตัว"
+        subtitle = "Your Personal Profile"
+        desc = "วิธีตั้งค่าโปรไฟล์:\n• เปลี่ยนชื่อเป็น [ชื่อใหม่]\n• เปลี่ยนอายุเป็น [อายุใหม่]\n• เปลี่ยนอาชีพเป็น [อาชีพใหม่]"
+        buttons = [
+            {"label": "👤 ดูข้อมูลโปรไฟล์ของฉัน", "text": "ข้อมูลของฉัน"},
+            {"label": "🗑️ ลบข้อมูลโปรไฟล์ทั้งหมด", "text": "ล้างข้อมูลของฉัน"}
+        ]
+    elif cat in {"เครื่องมือ", "tools", "⚙️"}:
+        title = "⚙️ เครื่องมือและบริการ"
+        subtitle = "System Utilities"
+        desc = "• ส่งไฟล์เสียง / อัดเสียงระบบ เพื่อแปลงเป็นข้อความได้\n• พิมพ์: แปล [ข้อความที่ต้องการแปลภาษาอังกฤษ]"
+        buttons = [
+            {"label": "📄 สร้างไฟล์ PDF จากรูปภาพ", "text": "ทำ PDF"},
+            {"label": "🎤 ถอดรหัสข้อความจากเสียง", "text": "แปลงเสียง"},
+            {"label": "🧹 ล้างประวัติสนทนากับ AI", "text": "ล้างแชท"}
+        ]
+    elif cat in {"ai assistant", "ai", "🌐"}:
+        title = "🌐 ผู้ช่วยปัญญาประดิษฐ์ AI"
+        subtitle = "Smart Conversational AI"
+        desc = "พิมพ์ถามข้อมูล เรื่องที่อยากรู้ หรือให้สรุปบทเรียนได้ตามต้องการ บอทจะตอบคำถามในห้องแชทโดยตรง"
+        buttons = [
+            {"label": "🧹 ล้างประวัติแชท/ความจำ AI", "text": "ล้างแชท"}
+        ]
+    else:
+        return False
+        
+    flex_buttons = []
+    for btn in buttons:
+        flex_buttons.append({
+            "type": "button",
+            "style": "primary",
+            "color": "#2ECC71",
+            "height": "sm",
+            "action": {
+                "type": "message",
+                "label": btn["label"],
+                "text": btn["text"]
+            }
+        })
+        
+    contents = {
+      "type": "bubble",
+      "size": "mega",
+      "body": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#F8F9FA",
+        "paddingAll": "12px",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#FFFFFF",
+            "cornerRadius": "20px",
+            "borderColor": "#EAEAEA",
+            "borderWidth": "1px",
+            "paddingAll": "20px",
+            "contents": [
+              {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "xs",
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": title,
+                    "weight": "bold",
+                    "size": "xl",
+                    "color": "#333333"
+                  },
+                  {
+                    "type": "text",
+                    "text": subtitle,
+                    "size": "xs",
+                    "color": "#777777"
+                  }
+                ]
+              },
+              {
+                "type": "separator",
+                "margin": "md",
+                "color": "#EAEAEA"
+              },
+              {
+                "type": "text",
+                "text": "💡 รายละเอียด / วิธีใช้งาน",
+                "weight": "bold",
+                "size": "sm",
+                "color": "#333333",
+                "margin": "lg"
+              },
+              {
+                "type": "text",
+                "text": desc,
+                "size": "xs",
+                "color": "#777777",
+                "margin": "sm",
+                "wrap": True
+              },
+              {
+                "type": "text",
+                "text": "⚙️ ฟังก์ชันที่เกี่ยวข้อง",
+                "weight": "bold",
+                "size": "sm",
+                "color": "#333333",
+                "margin": "lg"
+              },
+              {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "sm",
+                "margin": "md",
+                "contents": flex_buttons
+              },
+              {
+                "type": "box",
+                "layout": "vertical",
+                "margin": "lg",
+                "spacing": "xs",
+                "contents": [
+                  {
+                    "type": "separator",
+                    "color": "#EAEAEA"
+                  },
+                  {
+                    "type": "button",
+                    "style": "link",
+                    "height": "sm",
+                    "color": "#777777",
+                    "action": {
+                      "type": "message",
+                      "label": "🔙 กลับสู่เมนูหลัก",
+                      "text": "เมนู"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+    
+    alt_text = f"🤖 LouisAI PDF Bot - {title}"
+    
+    try:
+        res = requests.post(
+            LINE_REPLY_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "replyToken": reply_token,
+                "messages": [
+                    {
+                        "type": "flex",
+                        "altText": alt_text,
+                        "contents": contents
+                    }
+                ],
+            },
+            timeout=30,
+        )
+        if res.status_code != 200:
+            print(f"[LINE] Submenu Flex message failed with status {res.status_code}: {res.text}")
+        res.raise_for_status()
+    except Exception as e:
+        print(f"[LINE] Submenu Flex exception: {e}. Falling back to text.")
+        try:
+            fallback_msg = build_submenu_message(category)
+            if fallback_msg:
+                reply_text(reply_token, fallback_msg)
+        except Exception as fallback_err:
+            print(f"[LINE] Submenu fallback reply_text also failed: {fallback_err}")
+            
+    return True
 
 
 def reply_main_menu(reply_token):
