@@ -14,7 +14,7 @@ from typing import Any
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 
 from core.brain import ask_ai, clear_chat_history
@@ -91,6 +91,7 @@ PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 BOT_NAME = os.getenv("BOT_NAME", "LouisAI")
 
 LINE_REPLY_ENDPOINT = "https://api.line.me/v2/bot/message/reply"
+LINE_PUSH_ENDPOINT = "https://api.line.me/v2/bot/message/push"
 LINE_CONTENT_ENDPOINT = "https://api-data.line.me/v2/bot/message/{message_id}/content"
 
 # ── Commands ──────────────────────────────────────────────────────────────────
@@ -226,7 +227,9 @@ def health_check() -> dict[str, str | int]:
 
 @app.post("/webhook/line")
 async def line_webhook(
-    request: Request, x_line_signature: str = Header(default="")
+    request: Request,
+    background_tasks: BackgroundTasks,
+    x_line_signature: str = Header(default=""),
 ) -> dict[str, str]:
     if not LINE_CHANNEL_SECRET or not LINE_CHANNEL_ACCESS_TOKEN:
         raise HTTPException(status_code=500, detail="LINE env not configured.")
@@ -235,7 +238,7 @@ async def line_webhook(
         raise HTTPException(status_code=401, detail="Invalid signature.")
     payload = await request.json()
     for event in payload.get("events", []):
-        handle_event(event, request)
+        handle_event(event, request, background_tasks)
     return {"status": "ok"}
 
 
@@ -244,7 +247,7 @@ def verify_line_signature(body: bytes, signature: str, secret: str) -> bool:
     return hmac.compare_digest(base64.b64encode(digest).decode(), signature)
 
 
-def handle_event(event: dict[str, Any], request: Request) -> None:
+def handle_event(event: dict[str, Any], request: Request, background_tasks: BackgroundTasks) -> None:
     event_type = event.get("type")
     reply_token = event.get("replyToken")
     if event_type == "follow" and reply_token:
@@ -257,7 +260,7 @@ def handle_event(event: dict[str, Any], request: Request) -> None:
     message = event.get("message", {})
     message_type = message.get("type")
     if message_type == "text":
-        handle_text_message(reply_token, session_key, message.get("text", ""), request, source=source)
+        handle_text_message(reply_token, session_key, message.get("text", ""), request, source=source, background_tasks=background_tasks)
     elif message_type == "image":
         handle_image_message(reply_token, session_key, message.get("id", ""), request)
     elif message_type == "audio":
@@ -281,7 +284,7 @@ def handle_event(event: dict[str, Any], request: Request) -> None:
 
 
 # ── Text ──────────────────────────────────────────────────────────────────────
-def handle_text_message(reply_token, session_key, text, request, source=None):
+def handle_text_message(reply_token, session_key, text, request, source=None, background_tasks: BackgroundTasks | None = None):
     raw_text = text.strip()
     normalized = normalize_text(raw_text)
     session = get_session(session_key)
@@ -320,15 +323,39 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
             return
         pdf_filename = f"{safe_name}.pdf"
         output_path = GENERATED_DIR / pdf_filename
-        try:
-            build_pdf_from_images(images, str(output_path))
-            file_url = build_file_url(request, pdf_filename)
-            title = "จัดหน้ากระดาษ A4" if mode == "resize" else "รวมรูปภาพเป็น PDF"
-            reply_pdf_success(reply_token, title, safe_name, f"{len(images)} รูป", file_url)
-            clear_session(session_key)
-            cleanup_images(images)
-        except Exception as exc:
-            reply_text(reply_token, f"เกิดปัญหาสร้าง PDF ครับ: {exc}")
+        title = "จัดหน้ากระดาษ A4" if mode == "resize" else "รวมรูปภาพเป็น PDF"
+
+        # Reply immediately so the token doesn't expire during PDF generation
+        reply_text(reply_token, "⏳ กำลังประมวลผล... รอสักครู่ครับ")
+        clear_session(session_key)
+
+        def _build_pdf_task(
+            _images=images,
+            _output_path=str(output_path),
+            _file_url_base=PUBLIC_BASE_URL,
+            _pdf_filename=pdf_filename,
+            _safe_name=safe_name,
+            _title=title,
+            _user_id=line_user_id,
+            _request=request,
+        ):
+            try:
+                build_pdf_from_images(_images, _output_path)
+                file_url = (
+                    f"{_file_url_base}/files/{_pdf_filename}"
+                    if _file_url_base
+                    else build_file_url(_request, _pdf_filename)
+                )
+                push_pdf_success(_user_id, _title, _safe_name, f"{len(_images)} รูป", file_url)
+            except Exception as exc:
+                push_text(_user_id, f"เกิดปัญหาสร้าง PDF ครับ: {exc}")
+            finally:
+                cleanup_images(_images)
+
+        if background_tasks is not None:
+            background_tasks.add_task(_build_pdf_task)
+        else:
+            _build_pdf_task()
         return
 
     # ── Sub-menu Routing ──
@@ -691,7 +718,14 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
     # ── รอยืนยันว่าจะสร้าง PDF ไหม ──
     if state == "waiting_for_pdf_confirm":
         if normalized in PDF_YES_COMMANDS or "pdf" in normalized:
-            _create_confirmed_pdf(reply_token, session_key, mode, request)
+            # Reply immediately, then build PDF in background
+            reply_text(reply_token, "⏳ กำลังสร้าง PDF... รอสักครู่ครับ")
+            if background_tasks is not None:
+                background_tasks.add_task(
+                    _create_confirmed_pdf, line_user_id, session_key, mode, request
+                )
+            else:
+                _create_confirmed_pdf(line_user_id, session_key, mode, request)
         elif normalized in PDF_NO_COMMANDS:
             old = clear_session(session_key)
             cleanup_images(old.get("images", []))
@@ -1101,9 +1135,9 @@ def _process_and_summarize_docs(reply_token: str, session_key: str, summary_type
 
 
 def _create_confirmed_pdf(
-    reply_token: str, session_key: str, mode: str, request
+    user_id: str, session_key: str, mode: str, request
 ) -> None:
-    """สร้าง PDF หลังผู้ใช้ยืนยัน"""
+    """สร้าง PDF หลังผู้ใช้ยืนยัน — ใช้ push_text/push_pdf_success เพราะ reply_token หมดอายุแล้ว"""
     session = get_session(session_key)
     images = session.get("images", [])
     slip_data = session.get("slip_data", [])
@@ -1111,10 +1145,8 @@ def _create_confirmed_pdf(
 
     if not images:
         clear_session(session_key)
-        reply_text(reply_token, "⚠️ ไม่พบรูปเพื่อสร้าง PDF ครับ")
+        push_text(user_id, "⚠️ ไม่พบรูปเพื่อสร้าง PDF ครับ")
         return
-
-    reply_text(reply_token, "⏳ กำลังสร้าง PDF... รอสักครู่ครับ")
 
     from datetime import datetime as _dt
 
@@ -1144,9 +1176,9 @@ def _create_confirmed_pdf(
         elif mode == "doc_summary":
             title = "รายงานสรุปเอกสาร"
             detail_text = "สรุปเนื้อหาบทเรียน"
-        reply_pdf_success(reply_token, title, pdf_filename[:-4], detail_text, file_url)
+        push_pdf_success(user_id, title, pdf_filename[:-4], detail_text, file_url)
     except Exception as exc:
-        reply_text(reply_token, f"เกิดปัญหาสร้าง PDF ครับ: {exc}")
+        push_text(user_id, f"เกิดปัญหาสร้าง PDF ครับ: {exc}")
 
 
 def _mode_prefix(mode: str) -> str:
@@ -1886,6 +1918,148 @@ def reply_pdf_success(reply_token, title, safe_name, detail_text, file_url):
         print(f"[LINE] Flex message failed: {e}. Falling back to text.")
         fallback_text = f"✅ สร้าง PDF เรียบร้อยแล้วครับ 📄\n{detail_text} → {safe_name}.pdf\n🔗 {file_url}"
         reply_text(reply_token, fallback_text)
+
+
+def push_text(user_id: str, text: str) -> None:
+    """Send a message via the push API — does not require a reply_token."""
+    try:
+        requests.post(
+            LINE_PUSH_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "to": user_id,
+                "messages": [{"type": "text", "text": text[:5000]}],
+            },
+            timeout=30,
+        ).raise_for_status()
+    except Exception as e:
+        print(f"[LINE] push_text failed for {user_id}: {e}")
+
+
+def push_pdf_success(user_id: str, title: str, safe_name: str, detail_text: str, file_url: str) -> None:
+    """Send a PDF success Flex message via the push API — does not require a reply_token."""
+    alt_text = f"✅ สร้าง PDF สำเร็จแล้ว: {safe_name}.pdf"
+
+    contents = {
+      "type": "bubble",
+      "body": {
+        "type": "box",
+        "layout": "vertical",
+        "contents": [
+          {
+            "type": "text",
+            "text": "📄 PDF CREATED",
+            "weight": "bold",
+            "color": "#1DB954",
+            "size": "sm"
+          },
+          {
+            "type": "text",
+            "text": title,
+            "weight": "bold",
+            "size": "xl",
+            "margin": "md",
+            "color": "#111111"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "margin": "lg",
+            "spacing": "sm",
+            "contents": [
+              {
+                "type": "box",
+                "layout": "baseline",
+                "spacing": "sm",
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": "ชื่อไฟล์",
+                    "color": "#aaaaaa",
+                    "size": "sm",
+                    "flex": 2
+                  },
+                  {
+                    "type": "text",
+                    "text": f"{safe_name}.pdf",
+                    "wrap": True,
+                    "color": "#333333",
+                    "size": "sm",
+                    "flex": 5
+                  }
+                ]
+              },
+              {
+                "type": "box",
+                "layout": "baseline",
+                "spacing": "sm",
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": "รายละเอียด",
+                    "color": "#aaaaaa",
+                    "size": "sm",
+                    "flex": 2
+                  },
+                  {
+                    "type": "text",
+                    "text": detail_text,
+                    "wrap": True,
+                    "color": "#333333",
+                    "size": "sm",
+                    "flex": 5
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "footer": {
+        "type": "box",
+        "layout": "vertical",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "button",
+            "style": "primary",
+            "height": "sm",
+            "color": "#1DB954",
+            "action": {
+              "type": "uri",
+              "label": "📂 เปิดไฟล์ PDF",
+              "uri": file_url
+            }
+          }
+        ]
+      }
+    }
+
+    try:
+        requests.post(
+            LINE_PUSH_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "to": user_id,
+                "messages": [
+                    {
+                        "type": "flex",
+                        "altText": alt_text,
+                        "contents": contents
+                    }
+                ],
+            },
+            timeout=30,
+        ).raise_for_status()
+    except Exception as e:
+        print(f"[LINE] push_pdf_success Flex failed for {user_id}: {e}. Falling back to text.")
+        push_text(user_id, f"✅ สร้าง PDF เรียบร้อยแล้วครับ 📄\n{detail_text} → {safe_name}.pdf\n🔗 {file_url}")
 
 
 def build_file_url(request, filename):
