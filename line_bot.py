@@ -1864,7 +1864,7 @@ def reply_pdf_success(reply_token, title, safe_name, detail_text, file_url):
     }
     
     try:
-        requests.post(
+        res = requests.post(
             LINE_REPLY_ENDPOINT,
             headers={
                 "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
@@ -1881,17 +1881,25 @@ def reply_pdf_success(reply_token, title, safe_name, detail_text, file_url):
                 ],
             },
             timeout=30,
-        ).raise_for_status()
+        )
+        if res.status_code != 200:
+            print(f"[LINE] Flex message failed with status {res.status_code}: {res.text}")
+        res.raise_for_status()
     except Exception as e:
-        print(f"[LINE] Flex message failed: {e}. Falling back to text.")
+        print(f"[LINE] Flex message exception: {e}. Falling back to text.")
         fallback_text = f"✅ สร้าง PDF เรียบร้อยแล้วครับ 📄\n{detail_text} → {safe_name}.pdf\n🔗 {file_url}"
-        reply_text(reply_token, fallback_text)
+        try:
+            reply_text(reply_token, fallback_text)
+        except Exception as fallback_err:
+            print(f"[LINE] Fallback reply_text also failed: {fallback_err}")
 
 
 def build_file_url(request, filename):
+    import urllib.parse
+    encoded = urllib.parse.quote(filename)
     if PUBLIC_BASE_URL:
-        return f"{PUBLIC_BASE_URL}/files/{filename}"
-    return str(request.base_url).rstrip("/") + f"/files/{filename}"
+        return f"{PUBLIC_BASE_URL}/files/{encoded}"
+    return str(request.base_url).rstrip("/") + f"/files/{encoded}"
 
 
 def get_session_key(source):
