@@ -288,7 +288,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
     state = session.get("state", "idle")
     mode = session.get("mode")
     current_mode = session.get("current_mode")
-    user_id = session_key
+    user_id = session_key.split(":")[-1]
     line_user_id = (source or {}).get("userId") or session_key
 
     if normalized in CANCEL_COMMANDS:
