@@ -44,6 +44,7 @@ from core.line_pdf_sessions import (
     get_session,
     set_waiting_for_filename,
     set_waiting_for_pdf_confirm,
+    set_waiting_for_slip_type,
     start_pdf_flow,
 )
 from core.ocr_service import OCRUnavailableError, extract_text_from_images
@@ -89,6 +90,11 @@ LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 BOT_NAME = os.getenv("BOT_NAME", "LouisAI")
+
+
+def get_thailand_now() -> datetime:
+    from datetime import timezone, timedelta
+    return datetime.now(timezone(timedelta(hours=7)))
 
 LINE_REPLY_ENDPOINT = "https://api.line.me/v2/bot/message/reply"
 LINE_CONTENT_ENDPOINT = "https://api-data.line.me/v2/bot/message/{message_id}/content"
@@ -520,14 +526,14 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
 
     # ── Daily summary ──
     if normalized in DAILY_COMMANDS:
-        _show_daily_summary(reply_token, user_id, datetime.now().strftime("%Y-%m-%d"))
+        _show_daily_summary(reply_token, user_id, get_thailand_now().strftime("%Y-%m-%d"))
         return
 
     # สรุปวันที่ DD/MM
     _dm = re.match(r"^(สรุป|ดู|รายจ่าย|รายรับ)\s*(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{2,4}))?$", normalized)
     if _dm:
         _d, _mo = int(_dm.group(2)), int(_dm.group(3))
-        _yr = int(_dm.group(4)) if _dm.group(4) else datetime.now().year
+        _yr = int(_dm.group(4)) if _dm.group(4) else get_thailand_now().year
         if _yr < 100:
             _yr += 2000
         try:
@@ -538,7 +544,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         return
 
     if normalized in CATEGORY_COMMANDS:
-        now = datetime.now()
+        now = get_thailand_now()
         rows = get_expense_by_category(user_id, now.year, now.month)
         if not rows:
             reply_text(reply_token, "ยังไม่มีรายจ่ายเดือนนี้ครับ")
@@ -550,7 +556,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         return
 
     if normalized in SUMMARY_COMMANDS:
-        now = datetime.now()
+        now = get_thailand_now()
         s = get_monthly_summary(user_id, now.year, now.month)
         reply_text(
             reply_token,
@@ -998,9 +1004,7 @@ def _prompt_slip_type_selection(reply_token: str, session_key: str) -> None:
                 slip_data.append(data)
             except Exception:
                 slip_data.append({"amount": 0.0, "bank": "", "ref": "", "date": ""})
-        session["slip_data"] = slip_data
-
-    total = sum(d.get("amount", 0) or 0 for d in slip_data)
+        total = sum(d.get("amount", 0) or 0 for d in slip_data)
     valid_count = sum(1 for d in slip_data if d.get("amount"))
 
     lines = [
@@ -1012,7 +1016,7 @@ def _prompt_slip_type_selection(reply_token: str, session_key: str) -> None:
         "❓ ต้องการบันทึกสลิปชุดนี้เป็น รายจ่าย หรือ รายรับ ดีครับ? (กรุณากดเลือกปุ่มด้านล่าง)"
     ]
 
-    session["state"] = "waiting_for_slip_type"
+    set_waiting_for_slip_type(session_key, slip_data)
 
     reply_text_with_quick_replies(
         reply_token,
@@ -1437,7 +1441,7 @@ def _handle_event(reply_token, user_id, raw_text):
         )
         return
     title = parts[0]
-    event_date = parts[1] if len(parts) > 1 else datetime.now().strftime("%Y-%m-%d")
+    event_date = parts[1] if len(parts) > 1 else get_thailand_now().strftime("%Y-%m-%d")
     event_time = parts[2] if len(parts) > 2 else ""
     add_event(user_id, title, event_date, event_time)
     time_str = f" {event_time}" if event_time else ""
@@ -1634,7 +1638,7 @@ def _save_notes(data):
 def save_note(session_key, content):
     data = _load_notes()
     data.setdefault(session_key, []).append(
-        {"content": content, "time": datetime.now().strftime("%d/%m/%Y %H:%M")}
+        {"content": content, "time": get_thailand_now().strftime("%d/%m/%Y %H:%M")}
     )
     _save_notes(data)
 

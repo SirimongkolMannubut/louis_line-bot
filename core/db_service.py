@@ -10,6 +10,11 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 
+def get_thailand_now() -> datetime:
+    from datetime import timezone, timedelta
+    return datetime.now(timezone(timedelta(hours=7)))
+
+
 class ConnectionWrapper:
     def __init__(self, conn, db_type):
         self._conn = conn
@@ -175,7 +180,7 @@ def add_transaction(
                 amount,
                 category,
                 note,
-                datetime.now().strftime("%Y-%m-%d"),
+                get_thailand_now().strftime("%Y-%m-%d"),
             ),
         )
 
@@ -251,7 +256,7 @@ def add_event(user_id: str, title: str, event_date: str, event_time: str = "") -
 
 
 def get_upcoming_events(user_id: str, limit: int = 10) -> list:
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = get_thailand_now().strftime("%Y-%m-%d")
     with get_conn() as conn:
         return conn.execute(
             "SELECT * FROM events WHERE user_id=? AND event_date>=? ORDER BY event_date,event_time LIMIT ?",
@@ -260,7 +265,7 @@ def get_upcoming_events(user_id: str, limit: int = 10) -> list:
 
 
 def get_pending_notifications() -> list:
-    now = datetime.now()
+    now = get_thailand_now()
     date = now.strftime("%Y-%m-%d")
     time = now.strftime("%H:%M")
     with get_conn() as conn:
@@ -295,7 +300,7 @@ def save_slip(
                 ref,
                 dt,
                 raw_text,
-                datetime.now().isoformat(),
+                get_thailand_now().isoformat(),
                 batch_id,
             ),
         )

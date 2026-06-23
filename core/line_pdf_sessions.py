@@ -120,6 +120,22 @@ def set_waiting_for_filename(session_key: str) -> dict[str, Any]:
     return session
 
 
+def set_waiting_for_slip_type(
+    session_key: str,
+    slip_data: list | None = None,
+) -> dict[str, Any]:
+    """ตั้งค่า state รอยืนยันประเภทสลิป (รายรับ/รายจ่าย)"""
+    sessions = load_sessions()
+    session = sessions.get(session_key, _default_session())
+    session["state"] = "waiting_for_slip_type"
+    if slip_data is not None:
+        session["slip_data"] = slip_data
+    session["updated_at"] = _now_iso()
+    sessions[session_key] = session
+    save_sessions(sessions)
+    return session
+
+
 def set_waiting_for_pdf_confirm(
     session_key: str,
     slip_data: list | None = None,
