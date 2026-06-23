@@ -91,8 +91,8 @@ LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 BOT_NAME = os.getenv("BOT_NAME", "LouisAI")
 
-LIFF_DASHBOARD_URL = "https://liff.line.me/2010485952-5MZ2C6JG"
-LIFF_PROFILE_URL = "https://liff.line.me/2010485952-5MZ2C6JG/profile"
+LIFF_DASHBOARD_URL = "https://liff.line.me/2010485952-5MZ2C6JG/dashboard"
+LIFF_PROFILE_URL = "https://liff.line.me/2010485952-5MZ2C6JG/dashboard/profile"
 
 
 def get_thailand_now() -> datetime:
