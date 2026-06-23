@@ -346,7 +346,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         if profile.get("name"):
             reply_text(reply_token, f"คุณชื่อ {profile['name']} ครับ 😊")
         else:
-            reply_text(reply_token, "ยังไม่มีข้อมูลของคุณในระบบ")
+            reply_text(reply_token, "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!")
         return
 
     # ── ถามอายุตัวเอง ──
@@ -355,7 +355,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         if profile.get("age"):
             reply_text(reply_token, f"คุณอายุ {profile['age']} ปีครับ 🎂")
         else:
-            reply_text(reply_token, "ยังไม่มีข้อมูลของคุณในระบบ")
+            reply_text(reply_token, "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!")
         return
 
     # ── ถามอาชีพตัวเอง ──
@@ -364,7 +364,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         if profile.get("job"):
             reply_text(reply_token, f"คุณทำอาชีพ {profile['job']} ครับ 💼")
         else:
-            reply_text(reply_token, "ยังไม่มีข้อมูลของคุณในระบบ")
+            reply_text(reply_token, "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!")
         return
 
     if is_asking_own_profile(normalized):
@@ -1004,8 +1004,17 @@ def _process_and_summarize_slips(
             f"{total:,.2f} บาท",
         ]
         if total > 0:
-            add_transaction(user_id, "income", total, "สลิปโอนเงิน")
-            lines.append("✅ บันทึกรายรับแล้ว")
+            for idx, d in valid:
+                ref_val = d.get("ref") or ""
+                note_str = f"Parsed from slip: Ref {ref_val}" if ref_val else "Parsed from slip"
+                add_transaction(
+                    user_id=user_id,
+                    type_="income",
+                    amount=d.get("amount", 0.0),
+                    category="Transfer",
+                    note=note_str
+                )
+            lines.append(f"✅ บันทึกรายรับ {len(valid)} รายการแล้ว")
 
         # บันทึกข้อมูลสลิปแต่ละใบลงฐานข้อมูลแยกกัน
         batch_id = session.get("batch_id") or uuid.uuid4().hex
@@ -1153,7 +1162,7 @@ def _reply_profile(reply_token: str, user_id: str) -> None:
     """แสดงโปรไฟล์ของผู้ใช้"""
     profile = get_profile(user_id)
     if not profile or not (profile.get("name") or profile.get("age") or profile.get("job") or profile.get("location")):
-        reply_text(reply_token, "ยังไม่มีข้อมูลของคุณในระบบ")
+        reply_text(reply_token, "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!")
         return
     lines = []
     if profile.get("name"):
