@@ -91,6 +91,9 @@ LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 BOT_NAME = os.getenv("BOT_NAME", "LouisAI")
 
+LIFF_DASHBOARD_URL = "https://liff.line.me/2010485952-5MZ2C6JG"
+LIFF_PROFILE_URL = "https://liff.line.me/2010485952-5MZ2C6JG/profile"
+
 
 def get_thailand_now() -> datetime:
     from datetime import timezone, timedelta
@@ -352,7 +355,11 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         if profile.get("name"):
             reply_text(reply_token, f"คุณชื่อ {profile['name']} ครับ 😊")
         else:
-            reply_text(reply_token, "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!")
+            reply_text(
+                reply_token,
+                "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!\n"
+                f"🌐 หรือกดที่นี่เพื่อตั้งค่าโปรไฟล์: {LIFF_PROFILE_URL}"
+            )
         return
 
     # ── ถามอายุตัวเอง ──
@@ -361,7 +368,11 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         if profile.get("age"):
             reply_text(reply_token, f"คุณอายุ {profile['age']} ปีครับ 🎂")
         else:
-            reply_text(reply_token, "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!")
+            reply_text(
+                reply_token,
+                "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!\n"
+                f"🌐 หรือกดที่นี่เพื่อตั้งค่าโปรไฟล์: {LIFF_PROFILE_URL}"
+            )
         return
 
     # ── ถามอาชีพตัวเอง ──
@@ -370,7 +381,11 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         if profile.get("job"):
             reply_text(reply_token, f"คุณทำอาชีพ {profile['job']} ครับ 💼")
         else:
-            reply_text(reply_token, "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!")
+            reply_text(
+                reply_token,
+                "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!\n"
+                f"🌐 หรือกดที่นี่เพื่อตั้งค่าโปรไฟล์: {LIFF_PROFILE_URL}"
+            )
         return
 
     if is_asking_own_profile(normalized):
@@ -1234,7 +1249,11 @@ def _reply_profile(reply_token: str, user_id: str) -> None:
     """แสดงโปรไฟล์ของผู้ใช้"""
     profile = get_profile(user_id)
     if not profile or not (profile.get("name") or profile.get("age") or profile.get("job") or profile.get("location")):
-        reply_text(reply_token, "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!")
+        reply_text(
+            reply_token,
+            "คุณยังไม่ได้ตั้งค่าโปรไฟล์ สามารถเข้าไปแก้ไขข้อมูลได้ทันทีที่หน้าเว็บแดชบอร์ดครับ!\n"
+            f"🌐 หรือกดที่นี่เพื่อตั้งค่าโปรไฟล์: {LIFF_PROFILE_URL}"
+        )
         return
     lines = []
     if profile.get("name"):
@@ -1248,6 +1267,7 @@ def _reply_profile(reply_token: str, user_id: str) -> None:
     for k, v in profile.items():
         if k not in {"name", "age", "job", "location"}:
             lines.append(f"• {k}: {v}")
+    lines.append(f"\n🌐 หรือกดที่นี่เพื่อแก้ไขโปรไฟล์: {LIFF_PROFILE_URL}")
     reply_text(reply_token, "\n".join(lines))
 
 
@@ -2033,11 +2053,11 @@ def reply_submenu(reply_token, category: str) -> bool:
     elif cat in {"การเงิน", "finance"}:
         title = "💰 เมนูการเงิน"
         buttons = [
+            {"label": "🌐 เปิดแดชบอร์ดบนเว็บ", "uri": LIFF_DASHBOARD_URL},
             {"label": "📊 สรุปยอดเดือนนี้", "text": "สรุปเดือนนี้"},
             {"label": "📊 สรุปยอดวันนี้", "text": "สรุปวันนี้"},
             {"label": "📊 รายจ่ายแยกหมวดหมู่", "text": "สรุปหมวดหมู่"},
-            {"label": "⏳ ประวัติ 10 รายการล่าสุด", "text": "รายการล่าสุด"},
-            {"label": "🗑️ ลบข้อมูลทั้งหมด", "text": "ลบรายจ่ายทั้งหมด"}
+            {"label": "⏳ ประวัติ 10 รายการล่าสุด", "text": "รายการล่าสุด"}
         ]
     elif cat in {"นัดหมาย", "schedule"}:
         title = "📅 เมนูนัดหมาย"
@@ -2050,6 +2070,7 @@ def reply_submenu(reply_token, category: str) -> bool:
         title = "👤 เมนูโปรไฟล์"
         buttons = [
             {"label": "👤 ดูข้อมูลโปรไฟล์ของฉัน", "text": "ข้อมูลของฉัน"},
+            {"label": "🌐 แก้ไขโปรไฟล์บนเว็บ", "uri": LIFF_PROFILE_URL},
             {"label": "🗑️ ลบข้อมูลโปรไฟล์ทั้งหมด", "text": "ล้างข้อมูลของฉัน"}
         ]
     elif cat in {"เครื่องมือ", "tools", "⚙️"}:
@@ -2069,6 +2090,19 @@ def reply_submenu(reply_token, category: str) -> bool:
         
     flex_buttons = []
     for btn in buttons:
+        action_obj = {}
+        if "uri" in btn:
+            action_obj = {
+                "type": "uri",
+                "label": btn["label"],
+                "uri": btn["uri"]
+            }
+        else:
+            action_obj = {
+                "type": "message",
+                "label": btn["label"],
+                "text": btn["text"]
+            }
         flex_buttons.append({
             "type": "box",
             "layout": "vertical",
@@ -2077,11 +2111,7 @@ def reply_submenu(reply_token, category: str) -> bool:
             "paddingTop": "8px",
             "paddingBottom": "8px",
             "alignItems": "center",
-            "action": {
-                "type": "message",
-                "label": btn["label"],
-                "text": btn["text"]
-            },
+            "action": action_obj,
             "contents": [
                 {
                     "type": "text",
