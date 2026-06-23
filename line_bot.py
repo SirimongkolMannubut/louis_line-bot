@@ -94,6 +94,9 @@ BOT_NAME = os.getenv("BOT_NAME", "LouisAI")
 LIFF_DASHBOARD_URL = "https://liff.line.me/2010485952-5MZ2C6JG/dashboard"
 LIFF_PROFILE_URL = "https://liff.line.me/2010485952-5MZ2C6JG/dashboard/profile"
 LIFF_PDF_CREATOR_URL = "https://liff.line.me/2010485952-5MZ2C6JG/dashboard/pdf-creator"
+LIFF_TRANSACTIONS_URL = "https://liff.line.me/2010485952-5MZ2C6JG/dashboard/transactions"
+LIFF_SLIPS_URL = "https://liff.line.me/2010485952-5MZ2C6JG/dashboard/slips"
+LIFF_CALENDAR_URL = "https://liff.line.me/2010485952-5MZ2C6JG/dashboard/calendar"
 
 
 def get_thailand_now() -> datetime:
@@ -560,27 +563,11 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         return
 
     if normalized in CATEGORY_COMMANDS:
-        now = get_thailand_now()
-        rows = get_expense_by_category(user_id, now.year, now.month)
-        if not rows:
-            reply_text(reply_token, "ยังไม่มีรายจ่ายเดือนนี้ครับ")
-            return
-        lines = ["📊 รายจ่ายแยกหมวดหมู่เดือนนี้\n"]
-        for r in rows:
-            lines.append(f"• {r['category'] or 'อื่นๆ'}: {r['total']:,.2f} บาท")
-        reply_text(reply_token, "\n".join(lines))
+        reply_category_summary(reply_token, user_id)
         return
 
     if normalized in SUMMARY_COMMANDS:
-        now = get_thailand_now()
-        s = get_monthly_summary(user_id, now.year, now.month)
-        reply_text(
-            reply_token,
-            f"📊 สรุปการเงินเดือนนี้\n"
-            f"💚 รายรับ:  {s['income']:,.2f} บาท\n"
-            f"❤️ รายจ่าย: {s['expense']:,.2f} บาท\n"
-            f"💰 คงเหลือ:  {s['balance']:,.2f} บาท",
-        )
+        reply_finance_summary(reply_token, user_id)
         return
 
     if normalized in {"รายจ่ายทั้งหมด", "ดูรายจ่ายทั้งหมด"}:
@@ -1694,6 +1681,10 @@ def build_welcome_message():
 
 
 def _show_daily_summary(reply_token: str, user_id: str, date: str) -> None:
+    reply_daily_summary(reply_token, user_id, date)
+
+
+def reply_daily_summary(reply_token: str, user_id: str, date: str) -> None:
     s = get_daily_summary(user_id, date)
     rows = get_daily_transactions(user_id, date)
     try:
@@ -1701,20 +1692,497 @@ def _show_daily_summary(reply_token: str, user_id: str, date: str) -> None:
         display_date = f"{int(d):02d}/{int(mo):02d}/{y}"
     except Exception:
         display_date = date
+        
     if not rows:
         reply_text(reply_token, f"📅 {display_date}\nยังไม่มีรายการครับ")
         return
-    lines = [f"📅 สรุปวันที่ {display_date}\n"]
-    if s["income"] > 0:
-        lines.append(f"💚 รายรับ:  {s['income']:,.2f} บาท")
-    if s["expense"] > 0:
-        lines.append(f"❤️ รายจ่าย: {s['expense']:,.2f} บาท")
-    lines.append(f"💰 คงเหลือ:  {s['balance']:,.2f} บาท")
-    lines.append("\n─ รายการ ─")
+
+    # Build rows contents for Flex
+    item_contents = []
     for r in rows:
         icon = "💚" if r["type"] == "income" else "❤️"
-        lines.append(f"{icon} {r['category'] or '-'}  {r['amount']:,.2f} บาท")
-    reply_text(reply_token, "\n".join(lines))
+        color = "#2ECC71" if r["type"] == "income" else "#E74C3C"
+        cat_name = r.get("category") or "อื่นๆ"
+        item_contents.append({
+            "type": "box",
+            "layout": "horizontal",
+            "margin": "sm",
+            "contents": [
+                {"type": "text", "text": f"{icon} {cat_name}", "size": "xs", "color": "#555555", "flex": 5},
+                {"type": "text", "text": f"{r['amount']:,.2f} บาท", "size": "xs", "color": color, "weight": "bold", "align": "end", "flex": 5}
+            ]
+        })
+
+    contents = {
+      "type": "bubble",
+      "size": "mega",
+      "body": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#F8F9FA",
+        "paddingAll": "16px",
+        "contents": [
+          {
+            "type": "text",
+            "text": f"📅 สรุปยอดวันที่ {display_date}",
+            "weight": "bold",
+            "size": "lg",
+            "color": "#333333"
+          },
+          {
+            "type": "separator",
+            "color": "#EAEAEA",
+            "margin": "md"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "margin": "md",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                  {"type": "text", "text": "รายรับ", "size": "sm", "color": "#777777", "flex": 5},
+                  {"type": "text", "text": f"{s['income']:,.2f} บาท", "size": "sm", "color": "#2ECC71", "weight": "bold", "align": "end", "flex": 5}
+                ]
+              },
+              {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                  {"type": "text", "text": "รายจ่าย", "size": "sm", "color": "#777777", "flex": 5},
+                  {"type": "text", "text": f"{s['expense']:,.2f} บาท", "size": "sm", "color": "#E74C3C", "weight": "bold", "align": "end", "flex": 5}
+                ]
+              },
+              {
+                "type": "separator",
+                "color": "#EAEAEA",
+                "margin": "xs"
+              },
+              {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                  {"type": "text", "text": "คงเหลือสุทธิ", "size": "sm", "color": "#333333", "weight": "bold", "flex": 5},
+                  {"type": "text", "text": f"{s['balance']:,.2f} บาท", "size": "sm", "color": "#3498DB", "weight": "bold", "align": "end", "flex": 5}
+                ]
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "📋 รายการของวัน",
+            "weight": "bold",
+            "size": "xs",
+            "color": "#777777",
+            "margin": "lg"
+          },
+          {
+            "type": "separator",
+            "color": "#EAEAEA",
+            "margin": "xs"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "margin": "sm",
+            "spacing": "xs",
+            "contents": item_contents[:20]
+          },
+          {
+            "type": "separator",
+            "color": "#EAEAEA",
+            "margin": "md"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "margin": "md",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#3498DB",
+                "cornerRadius": "md",
+                "paddingTop": "8px",
+                "paddingBottom": "8px",
+                "alignItems": "center",
+                "action": {
+                  "type": "uri",
+                  "label": "🌐 ดูรายการทั้งหมดบนหน้าเว็บ",
+                  "uri": LIFF_TRANSACTIONS_URL
+                },
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": "🌐 ดูรายการทั้งหมดบนหน้าเว็บ",
+                    "color": "#FFFFFF",
+                    "weight": "bold",
+                    "size": "sm"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+    alt_text = f"📅 สรุปยอดวันที่ {display_date}: คงเหลือ {s['balance']:,.2f} บาท"
+
+    try:
+        res = requests.post(
+            LINE_REPLY_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "replyToken": reply_token,
+                "messages": [
+                    {
+                        "type": "flex",
+                        "altText": alt_text,
+                        "contents": contents
+                    }
+                ],
+            },
+            timeout=30,
+        )
+        if res.status_code != 200:
+            print(f"[LINE] Daily summary Flex failed: {res.status_code}: {res.text}")
+        res.raise_for_status()
+    except Exception as e:
+        print(f"[LINE] Daily summary Flex exception: {e}. Falling back to text.")
+        lines = [f"📅 สรุปวันที่ {display_date}\n"]
+        if s["income"] > 0:
+            lines.append(f"💚 รายรับ:  {s['income']:,.2f} บาท")
+        if s["expense"] > 0:
+            lines.append(f"❤️ รายจ่าย: {s['expense']:,.2f} บาท")
+        lines.append(f"💰 คงเหลือ:  {s['balance']:,.2f} บาท")
+        lines.append("\n─ รายการ ─")
+        for r in rows:
+            icon = "💚" if r["type"] == "income" else "❤️"
+            lines.append(f"{icon} {r['category'] or '-'}  {r['amount']:,.2f} บาท")
+        reply_text(reply_token, "\n".join(lines))
+
+
+def reply_finance_summary(reply_token: str, user_id: str) -> None:
+    now = get_thailand_now()
+    s = get_monthly_summary(user_id, now.year, now.month)
+    
+    income = s.get("income", 0.0)
+    expense = s.get("expense", 0.0)
+    balance = s.get("balance", 0.0)
+
+    contents = {
+      "type": "bubble",
+      "size": "mega",
+      "body": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#F8F9FA",
+        "paddingAll": "16px",
+        "contents": [
+          {
+            "type": "text",
+            "text": "📊 สรุปการเงินเดือนนี้",
+            "weight": "bold",
+            "size": "lg",
+            "color": "#333333"
+          },
+          {
+            "type": "text",
+            "text": f"ประจำปี {now.year} เดือน {now.month}",
+            "size": "xs",
+            "color": "#777777",
+            "margin": "xs"
+          },
+          {
+            "type": "separator",
+            "color": "#EAEAEA",
+            "margin": "md"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "margin": "md",
+            "spacing": "sm",
+            "contents": [
+              {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                  {"type": "text", "text": "🟢 รายรับทั้งหมด", "size": "sm", "color": "#555555", "flex": 3},
+                  {"type": "text", "text": f"{income:,.2f} บาท", "size": "sm", "color": "#2ECC71", "weight": "bold", "align": "end", "flex": 5}
+                ]
+              },
+              {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                  {"type": "text", "text": "🔴 รายจ่ายทั้งหมด", "size": "sm", "color": "#555555", "flex": 3},
+                  {"type": "text", "text": f"{expense:,.2f} บาท", "size": "sm", "color": "#E74C3C", "weight": "bold", "align": "end", "flex": 5}
+                ]
+              },
+              {
+                "type": "separator",
+                "color": "#EAEAEA",
+                "margin": "xs"
+              },
+              {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                  {"type": "text", "text": "💰 คงเหลือสุทธิ", "size": "sm", "color": "#333333", "weight": "bold", "flex": 3},
+                  {"type": "text", "text": f"{balance:,.2f} บาท", "size": "md", "color": "#3498DB", "weight": "bold", "align": "end", "flex": 5}
+                ]
+              }
+            ]
+          },
+          {
+            "type": "separator",
+            "color": "#EAEAEA",
+            "margin": "md"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "margin": "md",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#2ECC71",
+                "cornerRadius": "md",
+                "paddingTop": "8px",
+                "paddingBottom": "8px",
+                "alignItems": "center",
+                "action": {
+                  "type": "uri",
+                  "label": "🌐 เปิดแดชบอร์ดการเงิน",
+                  "uri": LIFF_DASHBOARD_URL
+                },
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": "🌐 เปิดแดชบอร์ดการเงิน",
+                    "color": "#FFFFFF",
+                    "weight": "bold",
+                    "size": "sm"
+                  }
+                ]
+              },
+              {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#3498DB",
+                "cornerRadius": "md",
+                "paddingTop": "8px",
+                "paddingBottom": "8px",
+                "alignItems": "center",
+                "action": {
+                  "type": "uri",
+                  "label": "🌐 ดูประวัติธุรกรรมทั้งหมด",
+                  "uri": LIFF_TRANSACTIONS_URL
+                },
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": "🌐 ดูประวัติธุรกรรมทั้งหมด",
+                    "color": "#FFFFFF",
+                    "weight": "bold",
+                    "size": "sm"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+    
+    alt_text = f"📊 สรุปการเงินเดือนนี้: {balance:,.2f} บาท"
+    
+    try:
+        res = requests.post(
+            LINE_REPLY_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "replyToken": reply_token,
+                "messages": [
+                    {
+                        "type": "flex",
+                        "altText": alt_text,
+                        "contents": contents
+                    }
+                ],
+            },
+            timeout=30,
+        )
+        if res.status_code != 200:
+            print(f"[LINE] Finance summary Flex failed: {res.status_code}: {res.text}")
+        res.raise_for_status()
+    except Exception as e:
+        print(f"[LINE] Finance summary Flex exception: {e}. Falling back to text.")
+        reply_text(
+            reply_token,
+            f"📊 สรุปการเงินเดือนนี้\n"
+            f"💚 รายรับ:  {income:,.2f} บาท\n"
+            f"❤️ รายจ่าย: {expense:,.2f} บาท\n"
+            f"💰 คงเหลือ:  {balance:,.2f} บาท",
+        )
+
+
+def reply_category_summary(reply_token: str, user_id: str) -> None:
+    now = get_thailand_now()
+    rows = get_expense_by_category(user_id, now.year, now.month)
+    if not rows:
+        reply_text(reply_token, "ยังไม่มีรายจ่ายเดือนนี้ครับ")
+        return
+
+    # Build category list items for Flex
+    item_contents = []
+    total_all = 0.0
+    for r in rows:
+        cat_name = r.get("category") or "อื่นๆ"
+        cat_total = r.get("total") or 0.0
+        total_all += cat_total
+        item_contents.append({
+            "type": "box",
+            "layout": "horizontal",
+            "margin": "sm",
+            "contents": [
+                {"type": "text", "text": f"• {cat_name}", "size": "sm", "color": "#555555", "flex": 5},
+                {"type": "text", "text": f"{cat_total:,.2f} บาท", "size": "sm", "color": "#E74C3C", "weight": "bold", "align": "end", "flex": 5}
+            ]
+        })
+        
+    contents = {
+      "type": "bubble",
+      "size": "mega",
+      "body": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#F8F9FA",
+        "paddingAll": "16px",
+        "contents": [
+          {
+            "type": "text",
+            "text": "📊 รายจ่ายแยกหมวดหมู่เดือนนี้",
+            "weight": "bold",
+            "size": "lg",
+            "color": "#333333"
+          },
+          {
+            "type": "text",
+            "text": f"ประจำปี {now.year} เดือน {now.month}",
+            "size": "xs",
+            "color": "#777777",
+            "margin": "xs"
+          },
+          {
+            "type": "separator",
+            "color": "#EAEAEA",
+            "margin": "md"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "margin": "md",
+            "spacing": "xs",
+            "contents": item_contents
+          },
+          {
+            "type": "separator",
+            "color": "#EAEAEA",
+            "margin": "md"
+          },
+          {
+            "type": "box",
+            "layout": "horizontal",
+            "contents": [
+              {"type": "text", "text": "รวมรายจ่ายทั้งหมด", "size": "sm", "color": "#333333", "weight": "bold", "flex": 5},
+              {"type": "text", "text": f"{total_all:,.2f} บาท", "size": "md", "color": "#E74C3C", "weight": "bold", "align": "end", "flex": 5}
+            ]
+          },
+          {
+            "type": "separator",
+            "color": "#EAEAEA",
+            "margin": "md"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "margin": "md",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#2ECC71",
+                "cornerRadius": "md",
+                "paddingTop": "8px",
+                "paddingBottom": "8px",
+                "alignItems": "center",
+                "action": {
+                  "type": "uri",
+                  "label": "🌐 ดูสถิติบนเว็บแดชบอร์ด",
+                  "uri": LIFF_DASHBOARD_URL
+                },
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": "🌐 ดูสถิติบนเว็บแดชบอร์ด",
+                    "color": "#FFFFFF",
+                    "weight": "bold",
+                    "size": "sm"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+    
+    alt_text = f"📊 สรุปรายจ่ายแยกหมวดหมู่เดือนนี้: {total_all:,.2f} บาท"
+    
+    try:
+        res = requests.post(
+            LINE_REPLY_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "replyToken": reply_token,
+                "messages": [
+                    {
+                        "type": "flex",
+                        "altText": alt_text,
+                        "contents": contents
+                    }
+                ],
+            },
+            timeout=30,
+        )
+        if res.status_code != 200:
+            print(f"[LINE] Category summary Flex failed: {res.status_code}: {res.text}")
+        res.raise_for_status()
+    except Exception as e:
+        print(f"[LINE] Category summary Flex exception: {e}. Falling back to text.")
+        lines = ["📊 รายจ่ายแยกหมวดหมู่เดือนนี้\n"]
+        for r in rows:
+            lines.append(f"• {r['category'] or 'อื่นๆ'}: {r['total']:,.2f} บาท")
+        reply_text(reply_token, "\n".join(lines))
 
 
 def build_help_message():
@@ -2048,24 +2516,24 @@ def reply_submenu(reply_token, category: str) -> bool:
         title = "🧾 เมนูสลิป"
         buttons = [
             {"label": "💸 รวมยอดหลายสลิป", "text": "รวมสลิป"},
-            {"label": "📊 ดูประวัติสลิปทั้งหมด", "text": "ดูสลิปทั้งหมด"},
+            {"label": "🌐 คลังสลิปโอนเงินบนเว็บ", "uri": LIFF_SLIPS_URL},
             {"label": "📊 ยอดรวมสลิปล่าสุด", "text": "ยอดรวมสลิป"}
         ]
     elif cat in {"การเงิน", "finance"}:
         title = "💰 เมนูการเงิน"
         buttons = [
-            {"label": "🌐 เปิดแดชบอร์ดบนเว็บ", "uri": LIFF_DASHBOARD_URL},
+            {"label": "🌐 แดชบอร์ดสรุปการเงิน", "uri": LIFF_DASHBOARD_URL},
+            {"label": "🌐 ประวัติธุรกรรมทั้งหมด", "uri": LIFF_TRANSACTIONS_URL},
             {"label": "📊 สรุปยอดเดือนนี้", "text": "สรุปเดือนนี้"},
             {"label": "📊 สรุปยอดวันนี้", "text": "สรุปวันนี้"},
-            {"label": "📊 รายจ่ายแยกหมวดหมู่", "text": "สรุปหมวดหมู่"},
-            {"label": "⏳ ประวัติ 10 รายการล่าสุด", "text": "รายการล่าสุด"}
+            {"label": "📊 รายจ่ายแยกหมวดหมู่", "text": "สรุปหมวดหมู่"}
         ]
     elif cat in {"นัดหมาย", "schedule"}:
         title = "📅 เมนูนัดหมาย"
         buttons = [
+            {"label": "🌐 ปฏิทินนัดหมายบนเว็บ", "uri": LIFF_CALENDAR_URL},
             {"label": "📅 ตารางนัดหมายทั้งหมด", "text": "ดูนัดหมาย"},
-            {"label": "📝 ดูบันทึกย่อทั้งหมด", "text": "ดูบันทึก"},
-            {"label": "🗑️ ลบประวัติบันทึกทั้งหมด", "text": "ลบบันทึก"}
+            {"label": "📝 ดูบันทึกย่อทั้งหมด", "text": "ดูบันทึก"}
         ]
     elif cat in {"โปรไฟล์", "profile"}:
         title = "👤 เมนูโปรไฟล์"
