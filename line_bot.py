@@ -93,6 +93,7 @@ BOT_NAME = os.getenv("BOT_NAME", "LouisAI")
 
 LIFF_DASHBOARD_URL = "https://liff.line.me/2010485952-5MZ2C6JG/dashboard"
 LIFF_PROFILE_URL = "https://liff.line.me/2010485952-5MZ2C6JG/dashboard/profile"
+LIFF_PDF_CREATOR_URL = "https://liff.line.me/2010485952-5MZ2C6JG/dashboard/pdf-creator"
 
 
 def get_thailand_now() -> datetime:
@@ -2041,7 +2042,7 @@ def reply_submenu(reply_token, category: str) -> bool:
         buttons = [
             {"label": "📝 สรุปเอกสาร", "text": "สรุปเอกสาร"},
             {"label": "🧾 สรุปใบเสร็จ", "text": "สรุปใบเสร็จ"},
-            {"label": "📄 ทำ PDF", "text": "ทำ PDF"}
+            {"label": "📄 ทำ PDF", "uri": LIFF_PDF_CREATOR_URL}
         ]
     elif cat in {"สลิป", "slip"}:
         title = "🧾 เมนูสลิป"
@@ -2076,7 +2077,7 @@ def reply_submenu(reply_token, category: str) -> bool:
     elif cat in {"เครื่องมือ", "tools", "⚙️"}:
         title = "⚙️ เมนูเครื่องมือ"
         buttons = [
-            {"label": "📄 สร้างไฟล์ PDF จากรูปภาพ", "text": "ทำ PDF"},
+            {"label": "📄 สร้างไฟล์ PDF จากรูปภาพ", "uri": LIFF_PDF_CREATOR_URL},
             {"label": "🎤 ถอดรหัสข้อความจากเสียง", "text": "แปลงเสียง"},
             {"label": "🧹 ล้างประวัติสนทนากับ AI", "text": "ล้างแชท"}
         ]
@@ -2380,9 +2381,9 @@ def reply_main_menu(reply_token):
                     "paddingBottom": "8px",
                     "alignItems": "center",
                     "action": {
-                      "type": "message",
+                      "type": "uri",
                       "label": "📄 ทำ PDF",
-                      "text": "ทำ PDF"
+                      "uri": "https://liff.line.me/2010485952-5MZ2C6JG/dashboard/pdf-creator"
                     },
                     "contents": [
                       {
