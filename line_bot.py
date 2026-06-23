@@ -1004,7 +1004,7 @@ def _prompt_slip_type_selection(reply_token: str, session_key: str) -> None:
                 slip_data.append(data)
             except Exception:
                 slip_data.append({"amount": 0.0, "bank": "", "ref": "", "date": ""})
-        total = sum(d.get("amount", 0) or 0 for d in slip_data)
+    total = sum(d.get("amount", 0) or 0 for d in slip_data)
     valid_count = sum(1 for d in slip_data if d.get("amount"))
 
     lines = [
