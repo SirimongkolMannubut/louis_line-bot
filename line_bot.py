@@ -664,7 +664,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
                 return
                 
             if mode == "multi_slip":
-                _process_and_summarize_slips(reply_token, session_key, user_id)
+                _prompt_slip_type_selection(reply_token, session_key)
                 return
             if mode == "ocr_summary_pdf":
                 _process_and_summarize_receipts(reply_token, session_key)
@@ -684,6 +684,31 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         # ถ้าไม่ใช่คำสั่ง ตอบคำถามผ่าน AI ได้ (ไม่ reset state)
         hint = f"[{waiting_msg(mode)}]"
         reply_text(reply_token, ask_ai(f"{raw_text}\n{hint}", user_id=user_id, profile_user_id=line_user_id))
+        return
+
+    # ── รอยืนยันประเภทสลิป (รายรับ/รายจ่าย) ──
+    if state == "waiting_for_slip_type":
+        if normalized == "บันทึกสลิปเป็นรายจ่าย":
+            _process_and_summarize_slips(reply_token, session_key, user_id, type_="expense")
+        elif normalized == "บันทึกสลิปเป็นรายรับ":
+            _process_and_summarize_slips(reply_token, session_key, user_id, type_="income")
+        elif normalized in CANCEL_COMMANDS:
+            old = clear_session(session_key)
+            cleanup_images(old.get("images", []))
+            reply_text(reply_token, "✅ ยกเลิกการบันทึกสลิปเรียบร้อยแล้วครับ")
+        else:
+            session = get_session(session_key)
+            slip_data = session.get("slip_data", [])
+            total = sum(d.get("amount", 0) or 0 for d in slip_data)
+            reply_text_with_quick_replies(
+                reply_token,
+                f"⚠️ กรุณาเลือกประเภทรายการ (ยอดรวม {total:,.2f} บาท) โดยกดปุ่มด้านล่างครับ:",
+                [
+                    {"label": "🔴 บันทึกเป็นรายจ่าย", "text": "บันทึกสลิปเป็นรายจ่าย"},
+                    {"label": "🟢 บันทึกเป็นรายรับ", "text": "บันทึกสลิปเป็นรายรับ"},
+                    {"label": "❌ ยกเลิก", "text": "ยกเลิก"}
+                ]
+            )
         return
 
     # ── รอยืนยันว่าจะสร้าง PDF ไหม ──
@@ -958,8 +983,50 @@ def handle_image_message(reply_token, session_key, message_id, request):
 
 
 # ── Slip / Receipt processors ─────────────────────────────────────────────────
+def _prompt_slip_type_selection(reply_token: str, session_key: str) -> None:
+    """แสดงสรุปยอดรวมของสลิปในแชท พร้อมส่งปุ่ม Quick Reply ให้เลือกประเภท"""
+    session = get_session(session_key)
+    images = session.get("images", [])
+    slip_data = session.get("slip_data", [])
+
+    # fallback: ถ้า slip_data ยังไม่ครบ (กรณี session เก่า)
+    if len(slip_data) < len(images):
+        missing = images[len(slip_data) :]
+        for img_path in missing:
+            try:
+                data = read_slip(img_path)
+                slip_data.append(data)
+            except Exception:
+                slip_data.append({"amount": 0.0, "bank": "", "ref": "", "date": ""})
+        session["slip_data"] = slip_data
+
+    total = sum(d.get("amount", 0) or 0 for d in slip_data)
+    valid_count = sum(1 for d in slip_data if d.get("amount"))
+
+    lines = [
+        f"📊 สรุปยอดสลิปทั้งหมด ({len(slip_data)} ใบ)",
+        "─" * 28,
+        f"💰 ยอดรวมสะสม: {total:,.2f} บาท",
+        f"✅ อ่านสำเร็จ: {valid_count} ใบ",
+        "─" * 28,
+        "❓ ต้องการบันทึกสลิปชุดนี้เป็น รายจ่าย หรือ รายรับ ดีครับ? (กรุณากดเลือกปุ่มด้านล่าง)"
+    ]
+
+    session["state"] = "waiting_for_slip_type"
+
+    reply_text_with_quick_replies(
+        reply_token,
+        "\n".join(lines),
+        [
+            {"label": "🔴 บันทึกเป็นรายจ่าย", "text": "บันทึกสลิปเป็นรายจ่าย"},
+            {"label": "🟢 บันทึกเป็นรายรับ", "text": "บันทึกสลิปเป็นรายรับ"},
+            {"label": "❌ ยกเลิก", "text": "ยกเลิก"}
+        ]
+    )
+
+
 def _process_and_summarize_slips(
-    reply_token: str, session_key: str, user_id: str
+    reply_token: str, session_key: str, user_id: str, type_: str = "expense"
 ) -> None:
     """สรุปสลิปจาก slip_data ที่เก็บไว้แล้ว (ไม่ต้อง re-read)"""
     session = get_session(session_key)
@@ -1009,12 +1076,13 @@ def _process_and_summarize_slips(
                 note_str = f"Parsed from slip: Ref {ref_val}" if ref_val else "Parsed from slip"
                 add_transaction(
                     user_id=user_id,
-                    type_="income",
+                    type_=type_,
                     amount=d.get("amount", 0.0),
                     category="Transfer",
                     note=note_str
                 )
-            lines.append(f"✅ บันทึกรายรับ {len(valid)} รายการแล้ว")
+            thai_type = "รายจ่าย" if type_ == "expense" else "รายรับ"
+            lines.append(f"✅ บันทึก{thai_type} {len(valid)} รายการแล้ว")
 
         # บันทึกข้อมูลสลิปแต่ละใบลงฐานข้อมูลแยกกัน
         batch_id = session.get("batch_id") or uuid.uuid4().hex
@@ -1770,6 +1838,39 @@ def reply_text(reply_token, text):
         json={
             "replyToken": reply_token,
             "messages": [{"type": "text", "text": text[:5000]}],
+        },
+        timeout=30,
+    ).raise_for_status()
+
+
+def reply_text_with_quick_replies(reply_token: str, text: str, items: list[dict]) -> None:
+    actions = []
+    for item in items:
+        actions.append({
+            "type": "action",
+            "action": {
+                "type": "message",
+                "label": item["label"],
+                "text": item["text"]
+            }
+        })
+    requests.post(
+        LINE_REPLY_ENDPOINT,
+        headers={
+            "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "replyToken": reply_token,
+            "messages": [
+                {
+                    "type": "text",
+                    "text": text[:5000],
+                    "quickReply": {
+                        "items": actions
+                    }
+                }
+            ],
         },
         timeout=30,
     ).raise_for_status()
