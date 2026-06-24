@@ -306,17 +306,17 @@ def reply_slip_selection_flex(reply_token: str, total: float, slip_data: list[di
         amt = d.get("amount") or 0.0
         if amt > 0:
             amt_text = f"{amt:,.2f} บาท"
-            amt_color = "#333333"
+            amt_color = "#E2E8F0"
         else:
             amt_text = "อ่านยอดไม่ได้"
-            amt_color = "#E74C3C"
+            amt_color = "#F87171"
             
         item_contents.append({
             "type": "box",
             "layout": "horizontal",
             "margin": "xs",
             "contents": [
-                {"type": "text", "text": f"{idx}. {bank}", "size": "xs", "color": "#555555", "flex": 6},
+                {"type": "text", "text": f"{idx}. {bank}", "size": "xs", "color": "#94A3B8", "flex": 6},
                 {"type": "text", "text": amt_text, "size": "xs", "color": amt_color, "weight": "bold", "align": "end", "flex": 4}
             ]
         })
@@ -324,87 +324,96 @@ def reply_slip_selection_flex(reply_token: str, total: float, slip_data: list[di
     contents = {
       "type": "bubble",
       "size": "mega",
-      "header": {
-        "type": "box",
-        "layout": "vertical",
-        "backgroundColor": "#1E3A8A",
-        "paddingAll": "16px",
-        "contents": [
-          {
-            "type": "text",
-            "text": "📊 สรุปยอดสลิปทั้งหมด",
-            "color": "#FFFFFF",
-            "weight": "bold",
-            "size": "lg"
-          },
-          {
-            "type": "text",
-            "text": f"ตรวจสอบและยืนยันข้อมูล ({len(slip_data)} ใบ)",
-            "color": "#93C5FD",
-            "size": "xs",
-            "margin": "xs"
-          }
-        ]
-      },
       "body": {
         "type": "box",
         "layout": "vertical",
-        "backgroundColor": "#F8F9FA",
-        "paddingAll": "16px",
+        "backgroundColor": "#0F172A",
+        "paddingAll": "12px",
         "contents": [
           {
             "type": "box",
             "layout": "vertical",
+            "backgroundColor": "#1E293B",
+            "cornerRadius": "20px",
+            "borderColor": "#334155",
+            "borderWidth": "1px",
+            "paddingAll": "16px",
             "contents": [
               {
                 "type": "text",
-                "text": "ยอดเงินรวมสะสม",
-                "size": "xs",
-                "color": "#777777"
+                "text": "📊 สรุปยอดสลิปทั้งหมด",
+                "weight": "bold",
+                "size": "lg",
+                "color": "#FFFFFF"
               },
               {
                 "type": "text",
-                "text": f"{total:,.2f} บาท",
-                "size": "xl",
-                "weight": "bold",
-                "color": "#111111",
+                "text": f"ตรวจสอบและยืนยันข้อมูล ({len(slip_data)} ใบ)",
+                "color": "#94A3B8",
+                "size": "xs",
                 "margin": "xs"
+              },
+              {
+                "type": "separator",
+                "color": "#334155",
+                "margin": "md"
+              },
+              {
+                "type": "box",
+                "layout": "vertical",
+                "margin": "md",
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": "ยอดเงินรวมสะสม",
+                    "size": "xs",
+                    "color": "#94A3B8"
+                  },
+                  {
+                    "type": "text",
+                    "text": f"{total:,.2f} บาท",
+                    "size": "xl",
+                    "weight": "bold",
+                    "color": "#60A5FA",
+                    "margin": "xs"
+                  }
+                ]
+              },
+              {
+                "type": "separator",
+                "color": "#334155",
+                "margin": "md"
+              },
+              {
+                "type": "text",
+                "text": "📋 รายละเอียดแต่ละใบ",
+                "weight": "bold",
+                "size": "xs",
+                "color": "#94A3B8",
+                "margin": "md"
+              },
+              {
+                "type": "box",
+                "layout": "vertical",
+                "margin": "sm",
+                "spacing": "xs",
+                "contents": item_contents[:20]
+              },
+              {
+                "type": "separator",
+                "color": "#334155",
+                "margin": "md"
+              },
+              {
+                "type": "text",
+                "text": "❓ บันทึกสลิปชุดนี้เป็น รายจ่าย หรือ รายรับ ดีครับ?",
+                "size": "xs",
+                "color": "#E2E8F0",
+                "align": "center",
+                "margin": "md",
+                "wrap": True
               }
             ]
-          },
-          {
-            "type": "separator",
-            "color": "#EAEAEA",
-            "margin": "md"
-          },
-          {
-            "type": "text",
-            "text": "📋 รายละเอียดแต่ละใบ",
-            "weight": "bold",
-            "size": "xs",
-            "color": "#777777",
-            "margin": "md"
-          },
-          {
-            "type": "box",
-            "layout": "vertical",
-            "margin": "sm",
-            "spacing": "xs",
-            "contents": item_contents[:20]
-          },
-          {
-            "type": "separator",
-            "color": "#EAEAEA",
-            "margin": "md"
-          },
-          {
-            "type": "text",
-            "text": "❓ บันทึกสลิปชุดนี้เป็น รายจ่าย หรือ รายรับ ดีครับ?",
-            "size": "xs",
-            "color": "#555555",
-            "align": "center",
-            "margin": "md",
-            "wrap": True
           }
         ]
       }
@@ -691,19 +700,29 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
 
     # ── Voice ──
     if normalized in VOICE_COMMANDS:
-        reply_text(
+        reply_premium_info_flex(
             reply_token,
-            "🎙️ ส่งไฟล์เสียงหรือบันทึกเสียงมาได้เลยครับ\n"
-            "ผมจะแปลงเสียงเป็นข้อความและสรุปให้ครับ\n\n"
-            "รองรับ: ไฟล์เสียงจาก LINE (กดไมค์ค้างแล้วพูด)",
+            title="🎙️ แปลงเสียงเป็นข้อความ",
+            subtitle="ส่งไฟล์เสียงหรือบันทึกเสียงมาได้เลยครับ",
+            bullet_points=[
+                "รองรับไฟล์เสียงบันทึกโดยตรงจากไลน์",
+                "ถอดรหัสเสียงเป็นข้อความได้รวดเร็ว แม่นยำ",
+                "วิเคราะห์และสรุปประเด็นด้วย AI"
+            ]
         )
         return
 
     # ── Translate ──
     if normalized in TRANSLATE_COMMANDS:
-        reply_text(
+        reply_premium_info_flex(
             reply_token,
-            "พิมพ์ข้อความที่ต้องการแปลได้เลยครับ\nเช่น 'แปลเป็นอังกฤษ: สวัสดี' หรือ 'แปลเป็นไทย: Hello'",
+            title="🌐 แปลภาษา (Translate)",
+            subtitle="พิมพ์ข้อความที่ต้องการแปลได้เลยครับ",
+            bullet_points=[
+                "แปลระหว่างภาษาไทยและภาษาอังกฤษ",
+                "ตัวอย่าง: พิมพ์ 'แปลเป็นอังกฤษ: สวัสดี'",
+                "ตัวอย่าง: พิมพ์ 'แปลเป็นไทย: Hello'"
+            ]
         )
         return
     if re.match(r"^แปลเป็น|^translate to", normalized):
@@ -1782,7 +1801,7 @@ def restart_flow(reply_token, session_key, mode):
     old = clear_session(session_key)
     cleanup_images(old.get("images", []))
     start_pdf_flow(session_key, mode=mode)
-    reply_text(reply_token, start_flow_msg(mode))
+    reply_flow_start_flex(reply_token, mode)
 
 
 def start_flow_msg(mode):
@@ -2005,14 +2024,14 @@ def reply_daily_summary(reply_token: str, user_id: str, date: str) -> None:
     item_contents = []
     for r in rows:
         icon = "💚" if r["type"] == "income" else "❤️"
-        color = "#2ECC71" if r["type"] == "income" else "#E74C3C"
+        color = "#34D399" if r["type"] == "income" else "#F87171"
         cat_name = r.get("category") or "อื่นๆ"
         item_contents.append({
             "type": "box",
             "layout": "horizontal",
             "margin": "sm",
             "contents": [
-                {"type": "text", "text": f"{icon} {cat_name}", "size": "xs", "color": "#555555", "flex": 5},
+                {"type": "text", "text": f"{icon} {cat_name}", "size": "xs", "color": "#E2E8F0", "flex": 5},
                 {"type": "text", "text": f"{r['amount']:,.2f} บาท", "size": "xs", "color": color, "weight": "bold", "align": "end", "flex": 5}
             ]
         })
@@ -2023,109 +2042,120 @@ def reply_daily_summary(reply_token: str, user_id: str, date: str) -> None:
       "body": {
         "type": "box",
         "layout": "vertical",
-        "backgroundColor": "#F8F9FA",
-        "paddingAll": "16px",
+        "backgroundColor": "#0F172A",
+        "paddingAll": "12px",
         "contents": [
-          {
-            "type": "text",
-            "text": f"📅 สรุปยอดวันที่ {display_date}",
-            "weight": "bold",
-            "size": "lg",
-            "color": "#333333"
-          },
-          {
-            "type": "separator",
-            "color": "#EAEAEA",
-            "margin": "md"
-          },
           {
             "type": "box",
             "layout": "vertical",
-            "margin": "md",
-            "spacing": "xs",
+            "backgroundColor": "#1E293B",
+            "cornerRadius": "20px",
+            "borderColor": "#334155",
+            "borderWidth": "1px",
+            "paddingAll": "16px",
             "contents": [
               {
-                "type": "box",
-                "layout": "horizontal",
-                "contents": [
-                  {"type": "text", "text": "รายรับ", "size": "sm", "color": "#777777", "flex": 5},
-                  {"type": "text", "text": f"{s['income']:,.2f} บาท", "size": "sm", "color": "#2ECC71", "weight": "bold", "align": "end", "flex": 5}
-                ]
-              },
-              {
-                "type": "box",
-                "layout": "horizontal",
-                "contents": [
-                  {"type": "text", "text": "รายจ่าย", "size": "sm", "color": "#777777", "flex": 5},
-                  {"type": "text", "text": f"{s['expense']:,.2f} บาท", "size": "sm", "color": "#E74C3C", "weight": "bold", "align": "end", "flex": 5}
-                ]
+                "type": "text",
+                "text": f"📅 สรุปยอดวันที่ {display_date}",
+                "weight": "bold",
+                "size": "lg",
+                "color": "#FFFFFF"
               },
               {
                 "type": "separator",
-                "color": "#EAEAEA",
+                "color": "#334155",
+                "margin": "md"
+              },
+              {
+                "type": "box",
+                "layout": "vertical",
+                "margin": "md",
+                "spacing": "xs",
+                "contents": [
+                  {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                      {"type": "text", "text": "รายรับ", "size": "sm", "color": "#94A3B8", "flex": 5},
+                      {"type": "text", "text": f"{s['income']:,.2f} บาท", "size": "sm", "color": "#34D399", "weight": "bold", "align": "end", "flex": 5}
+                    ]
+                  },
+                  {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                      {"type": "text", "text": "รายจ่าย", "size": "sm", "color": "#94A3B8", "flex": 5},
+                      {"type": "text", "text": f"{s['expense']:,.2f} บาท", "size": "sm", "color": "#F87171", "weight": "bold", "align": "end", "flex": 5}
+                    ]
+                  },
+                  {
+                    "type": "separator",
+                    "color": "#334155",
+                    "margin": "xs"
+                  },
+                  {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                      {"type": "text", "text": "คงเหลือสุทธิ", "size": "sm", "color": "#FFFFFF", "weight": "bold", "flex": 5},
+                      {"type": "text", "text": f"{s['balance']:,.2f} บาท", "size": "sm", "color": "#60A5FA", "weight": "bold", "align": "end", "flex": 5}
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": "📋 รายการของวัน",
+                "weight": "bold",
+                "size": "xs",
+                "color": "#94A3B8",
+                "margin": "lg"
+              },
+              {
+                "type": "separator",
+                "color": "#334155",
                 "margin": "xs"
               },
               {
                 "type": "box",
-                "layout": "horizontal",
-                "contents": [
-                  {"type": "text", "text": "คงเหลือสุทธิ", "size": "sm", "color": "#333333", "weight": "bold", "flex": 5},
-                  {"type": "text", "text": f"{s['balance']:,.2f} บาท", "size": "sm", "color": "#3498DB", "weight": "bold", "align": "end", "flex": 5}
-                ]
-              }
-            ]
-          },
-          {
-            "type": "text",
-            "text": "📋 รายการของวัน",
-            "weight": "bold",
-            "size": "xs",
-            "color": "#777777",
-            "margin": "lg"
-          },
-          {
-            "type": "separator",
-            "color": "#EAEAEA",
-            "margin": "xs"
-          },
-          {
-            "type": "box",
-            "layout": "vertical",
-            "margin": "sm",
-            "spacing": "xs",
-            "contents": item_contents[:20]
-          },
-          {
-            "type": "separator",
-            "color": "#EAEAEA",
-            "margin": "md"
-          },
-          {
-            "type": "box",
-            "layout": "vertical",
-            "margin": "md",
-            "spacing": "xs",
-            "contents": [
+                "layout": "vertical",
+                "margin": "sm",
+                "spacing": "xs",
+                "contents": item_contents[:20]
+              },
+              {
+                "type": "separator",
+                "color": "#334155",
+                "margin": "md"
+              },
               {
                 "type": "box",
                 "layout": "vertical",
-                "backgroundColor": "#3498DB",
-                "cornerRadius": "md",
-                "paddingTop": "8px",
-                "paddingBottom": "8px",
-                "alignItems": "center",
-                "action": {
-                  "type": "uri",
-                  "label": "🌐 ดูรายการทั้งหมดบนหน้าเว็บ",
-                  "uri": LIFF_TRANSACTIONS_URL
-                },
+                "margin": "md",
+                "spacing": "xs",
                 "contents": [
                   {
-                    "type": "text",
-                    "text": "🌐 ดูรายการทั้งหมดบนหน้าเว็บ",
-                    "color": "#FFFFFF",
-                    "weight": "bold",
-                    "size": "sm"
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#2563EB",
+                    "cornerRadius": "lg",
+                    "paddingTop": "10px",
+                    "paddingBottom": "10px",
+                    "alignItems": "center",
+                    "action": {
+                      "type": "uri",
+                      "label": "🌐 ดูรายการทั้งหมดบนหน้าเว็บ",
+                      "uri": LIFF_TRANSACTIONS_URL
+                    },
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "🌐 ดูรายการทั้งหมดบนหน้าเว็บ",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "sm"
+                      }
+                    ]
                   }
                 ]
               }
@@ -2188,119 +2218,131 @@ def reply_finance_summary(reply_token: str, user_id: str) -> None:
       "body": {
         "type": "box",
         "layout": "vertical",
-        "backgroundColor": "#F8F9FA",
-        "paddingAll": "16px",
+        "backgroundColor": "#0F172A",
+        "paddingAll": "12px",
         "contents": [
-          {
-            "type": "text",
-            "text": "📊 สรุปการเงินเดือนนี้",
-            "weight": "bold",
-            "size": "lg",
-            "color": "#333333"
-          },
-          {
-            "type": "text",
-            "text": f"ประจำปี {now.year} เดือน {now.month}",
-            "size": "xs",
-            "color": "#777777",
-            "margin": "xs"
-          },
-          {
-            "type": "separator",
-            "color": "#EAEAEA",
-            "margin": "md"
-          },
           {
             "type": "box",
             "layout": "vertical",
-            "margin": "md",
-            "spacing": "sm",
+            "backgroundColor": "#1E293B",
+            "cornerRadius": "20px",
+            "borderColor": "#334155",
+            "borderWidth": "1px",
+            "paddingAll": "16px",
             "contents": [
               {
-                "type": "box",
-                "layout": "horizontal",
-                "contents": [
-                  {"type": "text", "text": "🟢 รายรับทั้งหมด", "size": "sm", "color": "#555555", "flex": 3},
-                  {"type": "text", "text": f"{income:,.2f} บาท", "size": "sm", "color": "#2ECC71", "weight": "bold", "align": "end", "flex": 5}
-                ]
+                "type": "text",
+                "text": "📊 สรุปการเงินเดือนนี้",
+                "weight": "bold",
+                "size": "lg",
+                "color": "#FFFFFF"
               },
               {
-                "type": "box",
-                "layout": "horizontal",
-                "contents": [
-                  {"type": "text", "text": "🔴 รายจ่ายทั้งหมด", "size": "sm", "color": "#555555", "flex": 3},
-                  {"type": "text", "text": f"{expense:,.2f} บาท", "size": "sm", "color": "#E74C3C", "weight": "bold", "align": "end", "flex": 5}
-                ]
-              },
-              {
-                "type": "separator",
-                "color": "#EAEAEA",
+                "type": "text",
+                "text": f"ประจำปี {now.year} เดือน {now.month}",
+                "size": "xs",
+                "color": "#94A3B8",
                 "margin": "xs"
               },
               {
-                "type": "box",
-                "layout": "horizontal",
-                "contents": [
-                  {"type": "text", "text": "💰 คงเหลือสุทธิ", "size": "sm", "color": "#333333", "weight": "bold", "flex": 3},
-                  {"type": "text", "text": f"{balance:,.2f} บาท", "size": "md", "color": "#3498DB", "weight": "bold", "align": "end", "flex": 5}
-                ]
-              }
-            ]
-          },
-          {
-            "type": "separator",
-            "color": "#EAEAEA",
-            "margin": "md"
-          },
-          {
-            "type": "box",
-            "layout": "vertical",
-            "margin": "md",
-            "spacing": "xs",
-            "contents": [
+                "type": "separator",
+                "color": "#334155",
+                "margin": "md"
+              },
               {
                 "type": "box",
                 "layout": "vertical",
-                "backgroundColor": "#2ECC71",
-                "cornerRadius": "md",
-                "paddingTop": "8px",
-                "paddingBottom": "8px",
-                "alignItems": "center",
-                "action": {
-                  "type": "uri",
-                  "label": "🌐 เปิดแดชบอร์ดการเงิน",
-                  "uri": LIFF_DASHBOARD_URL
-                },
+                "margin": "md",
+                "spacing": "sm",
                 "contents": [
                   {
-                    "type": "text",
-                    "text": "🌐 เปิดแดชบอร์ดการเงิน",
-                    "color": "#FFFFFF",
-                    "weight": "bold",
-                    "size": "sm"
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                      {"type": "text", "text": "🟢 รายรับทั้งหมด", "size": "sm", "color": "#94A3B8", "flex": 3},
+                      {"type": "text", "text": f"{income:,.2f} บาท", "size": "sm", "color": "#34D399", "weight": "bold", "align": "end", "flex": 5}
+                    ]
+                  },
+                  {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                      {"type": "text", "text": "🔴 รายจ่ายทั้งหมด", "size": "sm", "color": "#94A3B8", "flex": 3},
+                      {"type": "text", "text": f"{expense:,.2f} บาท", "size": "sm", "color": "#F87171", "weight": "bold", "align": "end", "flex": 5}
+                    ]
+                  },
+                  {
+                    "type": "separator",
+                    "color": "#334155",
+                    "margin": "xs"
+                  },
+                  {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                      {"type": "text", "text": "💰 คงเหลือสุทธิ", "size": "sm", "color": "#FFFFFF", "weight": "bold", "flex": 3},
+                      {"type": "text", "text": f"{balance:,.2f} บาท", "size": "md", "color": "#60A5FA", "weight": "bold", "align": "end", "flex": 5}
+                    ]
                   }
                 ]
               },
               {
+                "type": "separator",
+                "color": "#334155",
+                "margin": "md"
+              },
+              {
                 "type": "box",
                 "layout": "vertical",
-                "backgroundColor": "#3498DB",
-                "cornerRadius": "md",
-                "paddingTop": "8px",
-                "paddingBottom": "8px",
-                "alignItems": "center",
-                "action": {
-                  "type": "uri",
-                  "label": "🌐 ดูประวัติธุรกรรมทั้งหมด",
-                  "uri": LIFF_TRANSACTIONS_URL
-                },
+                "margin": "md",
+                "spacing": "xs",
                 "contents": [
                   {
-                    "type": "text",
-                    "text": "🌐 ดูประวัติธุรกรรมทั้งหมด",
-                    "color": "#FFFFFF",
-                    "weight": "bold",
-                    "size": "sm"
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#2563EB",
+                    "cornerRadius": "lg",
+                    "paddingTop": "10px",
+                    "paddingBottom": "10px",
+                    "alignItems": "center",
+                    "action": {
+                      "type": "uri",
+                      "label": "🌐 เปิดแดชบอร์ดการเงิน",
+                      "uri": LIFF_DASHBOARD_URL
+                    },
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "🌐 เปิดแดชบอร์ดการเงิน",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "sm"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#334155",
+                    "cornerRadius": "lg",
+                    "paddingTop": "10px",
+                    "paddingBottom": "10px",
+                    "margin": "sm",
+                    "alignItems": "center",
+                    "action": {
+                      "type": "uri",
+                      "label": "🌐 ดูประวัติธุรกรรมทั้งหมด",
+                      "uri": LIFF_TRANSACTIONS_URL
+                    },
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "🌐 ดูประวัติธุรกรรมทั้งหมด",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "sm"
+                      }
+                    ]
                   }
                 ]
               }
@@ -2364,8 +2406,8 @@ def reply_category_summary(reply_token: str, user_id: str) -> None:
             "layout": "horizontal",
             "margin": "sm",
             "contents": [
-                {"type": "text", "text": f"• {cat_name}", "size": "sm", "color": "#555555", "flex": 5},
-                {"type": "text", "text": f"{cat_total:,.2f} บาท", "size": "sm", "color": "#E74C3C", "weight": "bold", "align": "end", "flex": 5}
+                {"type": "text", "text": f"• {cat_name}", "size": "sm", "color": "#E2E8F0", "flex": 5},
+                {"type": "text", "text": f"{cat_total:,.2f} บาท", "size": "sm", "color": "#F87171", "weight": "bold", "align": "end", "flex": 5}
             ]
         })
         
@@ -2375,79 +2417,90 @@ def reply_category_summary(reply_token: str, user_id: str) -> None:
       "body": {
         "type": "box",
         "layout": "vertical",
-        "backgroundColor": "#F8F9FA",
-        "paddingAll": "16px",
+        "backgroundColor": "#0F172A",
+        "paddingAll": "12px",
         "contents": [
           {
-            "type": "text",
-            "text": "📊 รายจ่ายแยกหมวดหมู่เดือนนี้",
-            "weight": "bold",
-            "size": "lg",
-            "color": "#333333"
-          },
-          {
-            "type": "text",
-            "text": f"ประจำปี {now.year} เดือน {now.month}",
-            "size": "xs",
-            "color": "#777777",
-            "margin": "xs"
-          },
-          {
-            "type": "separator",
-            "color": "#EAEAEA",
-            "margin": "md"
-          },
-          {
             "type": "box",
             "layout": "vertical",
-            "margin": "md",
-            "spacing": "xs",
-            "contents": item_contents
-          },
-          {
-            "type": "separator",
-            "color": "#EAEAEA",
-            "margin": "md"
-          },
-          {
-            "type": "box",
-            "layout": "horizontal",
+            "backgroundColor": "#1E293B",
+            "cornerRadius": "20px",
+            "borderColor": "#334155",
+            "borderWidth": "1px",
+            "paddingAll": "16px",
             "contents": [
-              {"type": "text", "text": "รวมรายจ่ายทั้งหมด", "size": "sm", "color": "#333333", "weight": "bold", "flex": 5},
-              {"type": "text", "text": f"{total_all:,.2f} บาท", "size": "md", "color": "#E74C3C", "weight": "bold", "align": "end", "flex": 5}
-            ]
-          },
-          {
-            "type": "separator",
-            "color": "#EAEAEA",
-            "margin": "md"
-          },
-          {
-            "type": "box",
-            "layout": "vertical",
-            "margin": "md",
-            "spacing": "xs",
-            "contents": [
+              {
+                "type": "text",
+                "text": "📊 รายจ่ายแยกหมวดหมู่เดือนนี้",
+                "weight": "bold",
+                "size": "lg",
+                "color": "#FFFFFF"
+              },
+              {
+                "type": "text",
+                "text": f"ประจำปี {now.year} เดือน {now.month}",
+                "size": "xs",
+                "color": "#94A3B8",
+                "margin": "xs"
+              },
+              {
+                "type": "separator",
+                "color": "#334155",
+                "margin": "md"
+              },
               {
                 "type": "box",
                 "layout": "vertical",
-                "backgroundColor": "#2ECC71",
-                "cornerRadius": "md",
-                "paddingTop": "8px",
-                "paddingBottom": "8px",
-                "alignItems": "center",
-                "action": {
-                  "type": "uri",
-                  "label": "🌐 ดูสถิติบนเว็บแดชบอร์ด",
-                  "uri": LIFF_DASHBOARD_URL
-                },
+                "margin": "md",
+                "spacing": "xs",
+                "contents": item_contents
+              },
+              {
+                "type": "separator",
+                "color": "#334155",
+                "margin": "md"
+              },
+              {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                  {"type": "text", "text": "รวมรายจ่ายทั้งหมด", "size": "sm", "color": "#FFFFFF", "weight": "bold", "flex": 5},
+                  {"type": "text", "text": f"{total_all:,.2f} บาท", "size": "md", "color": "#F87171", "weight": "bold", "align": "end", "flex": 5}
+                ]
+              },
+              {
+                "type": "separator",
+                "color": "#334155",
+                "margin": "md"
+              },
+              {
+                "type": "box",
+                "layout": "vertical",
+                "margin": "md",
+                "spacing": "xs",
                 "contents": [
                   {
-                    "type": "text",
-                    "text": "🌐 ดูสถิติบนเว็บแดชบอร์ด",
-                    "color": "#FFFFFF",
-                    "weight": "bold",
-                    "size": "sm"
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#2563EB",
+                    "cornerRadius": "lg",
+                    "paddingTop": "10px",
+                    "paddingBottom": "10px",
+                    "alignItems": "center",
+                    "action": {
+                      "type": "uri",
+                      "label": "🌐 ดูสถิติบนเว็บแดชบอร์ด",
+                      "uri": LIFF_DASHBOARD_URL
+                    },
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "🌐 ดูสถิติบนเว็บแดชบอร์ด",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "sm"
+                      }
+                    ]
                   }
                 ]
               }
@@ -2681,91 +2734,110 @@ def reply_pdf_success(reply_token, title, safe_name, detail_text, file_url):
       "body": {
         "type": "box",
         "layout": "vertical",
+        "backgroundColor": "#0F172A",
+        "paddingAll": "12px",
         "contents": [
-          {
-            "type": "text",
-            "text": "📄 PDF CREATED",
-            "weight": "bold",
-            "color": "#1DB954",
-            "size": "sm"
-          },
-          {
-            "type": "text",
-            "text": title,
-            "weight": "bold",
-            "size": "xl",
-            "margin": "md",
-            "color": "#111111"
-          },
           {
             "type": "box",
             "layout": "vertical",
-            "margin": "lg",
-            "spacing": "sm",
+            "backgroundColor": "#1E293B",
+            "cornerRadius": "20px",
+            "borderColor": "#334155",
+            "borderWidth": "1px",
+            "paddingAll": "16px",
             "contents": [
               {
+                "type": "text",
+                "text": "📄 PDF CREATED",
+                "weight": "bold",
+                "color": "#34D399",
+                "size": "sm"
+              },
+               {
+                "type": "text",
+                "text": title,
+                "weight": "bold",
+                "size": "xl",
+                "margin": "md",
+                "color": "#FFFFFF"
+              },
+              {
                 "type": "box",
-                "layout": "baseline",
+                "layout": "vertical",
+                "margin": "lg",
                 "spacing": "sm",
                 "contents": [
                   {
-                    "type": "text",
-                    "text": "ชื่อไฟล์",
-                    "color": "#aaaaaa",
-                    "size": "sm",
-                    "flex": 2
+                    "type": "box",
+                    "layout": "baseline",
+                    "spacing": "sm",
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "ชื่อไฟล์",
+                        "color": "#94A3B8",
+                        "size": "sm",
+                        "flex": 2
+                      },
+                      {
+                        "type": "text",
+                        "text": f"{safe_name}.pdf",
+                        "wrap": True,
+                        "color": "#E2E8F0",
+                        "size": "sm",
+                        "flex": 5
+                      }
+                    ]
                   },
                   {
-                    "type": "text",
-                    "text": f"{safe_name}.pdf",
-                    "wrap": True,
-                    "color": "#333333",
-                    "size": "sm",
-                    "flex": 5
+                    "type": "box",
+                    "layout": "baseline",
+                    "spacing": "sm",
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "รายละเอียด",
+                        "color": "#94A3B8",
+                        "size": "sm",
+                        "flex": 2
+                      },
+                      {
+                        "type": "text",
+                        "text": detail_text,
+                        "wrap": True,
+                        "color": "#E2E8F0",
+                        "size": "sm",
+                        "flex": 5
+                      }
+                    ]
                   }
                 ]
               },
               {
+                "type": "separator",
+                "color": "#334155",
+                "margin": "lg"
+              },
+              {
                 "type": "box",
-                "layout": "baseline",
+                "layout": "vertical",
+                "margin": "md",
                 "spacing": "sm",
                 "contents": [
                   {
-                    "type": "text",
-                    "text": "รายละเอียด",
-                    "color": "#aaaaaa",
-                    "size": "sm",
-                    "flex": 2
-                  },
-                  {
-                    "type": "text",
-                    "text": detail_text,
-                    "wrap": True,
-                    "color": "#333333",
-                    "size": "sm",
-                    "flex": 5
+                    "type": "button",
+                     "style": "primary",
+                     "height": "sm",
+                     "color": "#2563EB",
+                     "action": {
+                       "type": "uri",
+                       "label": "📂 เปิดไฟล์ PDF",
+                       "uri": file_url
+                     }
                   }
                 ]
               }
             ]
-          }
-        ]
-      },
-      "footer": {
-        "type": "box",
-        "layout": "vertical",
-        "spacing": "sm",
-        "contents": [
-          {
-            "type": "button",
-            "style": "primary",
-            "height": "sm",
-            "color": "#1DB954",
-            "action": {
-              "type": "uri",
-              "label": "📂 เปิดไฟล์ PDF",
-              "uri": file_url
-            }
           }
         ]
       }
@@ -2889,6 +2961,282 @@ def reply_pdf_creator_link(reply_token):
             reply_text(reply_token, fallback_text)
         except Exception as fallback_err:
             print(f"[LINE] Fallback reply_text also failed: {fallback_err}")
+
+
+def reply_premium_info_flex(
+    reply_token: str,
+    title: str,
+    subtitle: str,
+    bullet_points: list[str],
+    footer_text: str = None,
+    quick_replies: list[dict] = None
+) -> None:
+    body_contents = [
+        {
+            "type": "text",
+            "text": title,
+            "weight": "bold",
+            "size": "lg",
+            "color": "#FFFFFF"
+        }
+    ]
+    if subtitle:
+        body_contents.append({
+            "type": "text",
+            "text": subtitle,
+            "size": "xs",
+            "color": "#94A3B8",
+            "margin": "xs",
+            "wrap": True
+        })
+        
+    body_contents.append({
+        "type": "separator",
+        "color": "#334155",
+        "margin": "md"
+    })
+    
+    bullets_box = {
+        "type": "box",
+        "layout": "vertical",
+        "margin": "md",
+        "spacing": "sm",
+        "contents": []
+    }
+    for bp in bullet_points:
+        bullets_box["contents"].append({
+            "type": "box",
+            "layout": "baseline",
+            "spacing": "sm",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "✓",
+                    "color": "#3B82F6",
+                    "size": "sm",
+                    "flex": 1,
+                    "weight": "bold"
+                },
+                {
+                    "type": "text",
+                    "text": bp,
+                    "color": "#E2E8F0",
+                    "size": "sm",
+                    "flex": 11,
+                    "wrap": True
+                }
+            ]
+        })
+    body_contents.append(bullets_box)
+    
+    if footer_text:
+        body_contents.append({
+            "type": "separator",
+            "color": "#334155",
+            "margin": "md"
+        })
+        body_contents.append({
+            "type": "text",
+            "text": footer_text,
+            "size": "xxs",
+            "color": "#94A3B8",
+            "margin": "sm",
+            "wrap": True,
+            "align": "center"
+        })
+        
+    contents = {
+        "type": "bubble",
+        "size": "mega",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#0F172A",
+            "paddingAll": "12px",
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#1E293B",
+                    "cornerRadius": "20px",
+                    "borderColor": "#334155",
+                    "borderWidth": "1px",
+                    "paddingAll": "16px",
+                    "contents": body_contents
+                }
+            ]
+        }
+    }
+    
+    alt_text = f"🤖 {title}"
+    
+    message_payload = {
+        "type": "flex",
+        "altText": alt_text,
+        "contents": contents
+    }
+    
+    if quick_replies:
+        actions = []
+        for item in quick_replies:
+            if "uri" in item:
+                action_def = {
+                    "type": "uri",
+                    "label": item["label"],
+                    "uri": item["uri"]
+                }
+            else:
+                action_def = {
+                    "type": "message",
+                    "label": item["label"],
+                    "text": item["text"]
+                }
+            actions.append({
+                "type": "action",
+                "action": action_def
+            })
+        message_payload["quickReply"] = {
+            "items": actions
+        }
+        
+    try:
+        res = requests.post(
+            LINE_REPLY_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "replyToken": reply_token,
+                "messages": [message_payload],
+            },
+            timeout=30,
+        )
+        if res.status_code != 200:
+            print(f"[LINE] reply_premium_info_flex failed: {res.status_code}: {res.text}")
+        res.raise_for_status()
+    except Exception as e:
+        print(f"[LINE] reply_premium_info_flex exception: {e}. Falling back to text.")
+        fallback = f"🤖 {title}\n{subtitle}\n" + "\n".join(f"- {bp}" for bp in bullet_points)
+        if footer_text:
+            fallback += f"\n\n{footer_text}"
+        try:
+            if quick_replies:
+                reply_text_with_quick_replies(reply_token, fallback, quick_replies)
+            else:
+                reply_text(reply_token, fallback)
+        except Exception:
+            pass
+
+
+def reply_flow_start_flex(reply_token, mode):
+    std_qr = [
+        {"label": "✅ เสร็จแล้ว", "text": "เสร็จแล้ว"},
+        {"label": "❌ ยกเลิก", "text": "ยกเลิก"}
+    ]
+    doc_qr = [
+        {"label": "📝 สรุปแบบสั้น", "text": "สรุปแบบสั้น"},
+        {"label": "📖 สรุปแบบละเอียด", "text": "สรุปแบบละเอียด"},
+        {"label": "🎓 สรุปเพื่อสอบ", "text": "สรุปเพื่อสอบ"},
+        {"label": "📋 สรุปเป็นข้อ", "text": "สรุปเป็นข้อ"},
+        {"label": "🧠 สรุปเป็น mind map", "text": "สรุปเป็น mind map"},
+        {"label": "❌ ยกเลิก", "text": "ยกเลิก"}
+    ]
+
+    if mode == "ocr_summary_pdf":
+        reply_premium_info_flex(
+            reply_token,
+            title="🧠 AI วิเคราะห์เอกสารการเงิน",
+            subtitle="วิเคราะห์ ใบเสร็จ / บิล / สลิปโอนเงิน",
+            bullet_points=[
+                "อ่านข้อความและวิเคราะห์ด้วย AI อัตโนมัติ",
+                "แยกรายการ หมวดหมู่ รายรับ-รายจ่าย และยอดรวม",
+                "บันทึกข้อมูลและส่งออกรายงานสรุปการเงินได้",
+                "ส่งรูปภาพเพิ่มเติมได้ตลอดเวลา"
+            ],
+            footer_text="📎 ส่งรูปบิลหรือสลิปมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
+            quick_replies=std_qr
+        )
+    elif mode == "doc_summary":
+        reply_premium_info_flex(
+            reply_token,
+            title="📝 สรุปชีทเรียน & เอกสาร",
+            subtitle="สรุปความรู้ด้วยระบบประมวลผลภาษาของ AI",
+            bullet_points=[
+                "ส่งรูปชีทเรียน หนังสือเรียน หรือเอกสารได้หลายภาพ",
+                "วิเคราะห์และสรุปภาษาไทยและอังกฤษอย่างชาญฉลาด",
+                "เลือกโหมดสรุปที่ชอบจากปุ่ม Quick Reply ได้ทันที"
+            ],
+            footer_text="📎 ส่งรูปเอกสารมาได้เลยครับ เสร็จแล้วกดปุ่มเลือกโหมดสรุป",
+            quick_replies=doc_qr
+        )
+    elif mode == "slip":
+        reply_premium_info_flex(
+            reply_token,
+            title="🧾 อ่านสลิป + บันทึกยอด",
+            subtitle="ตรวจสอบสลิปโอนเงินและบันทึกรายรับ-จ่าย",
+            bullet_points=[
+                "สแกนข้อมูลจากสลิปอัตโนมัติ (ยอดเงิน/วันเวลา)",
+                "ช่วยจดบันทึกประวัติการเงินของคุณให้อย่างรวดเร็ว"
+            ],
+            footer_text="📎 ส่งรูปสลิปมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
+            quick_replies=std_qr
+        )
+    elif mode == "multi_slip":
+        reply_premium_info_flex(
+            reply_token,
+            title="🧾 รวมยอดสลิป",
+            subtitle="วิเคราะห์และรวมยอดจากหลายสลิปในแชทเดียว",
+            bullet_points=[
+                "ดึงยอดเงินโอน วันเวลา และข้อมูลปลายทาง",
+                "คำนวณและแสดงผลยอดรวมทั้งหมดในใบเดียว",
+                "สะดวกและรวดเร็ว ไม่จำกัดจำนวนสลิป"
+            ],
+            footer_text="📎 ส่งรูปสลิปมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
+            quick_replies=std_qr
+        )
+    elif mode == "pdf":
+        reply_premium_info_flex(
+            reply_token,
+            title="📄 แปลงรูปเป็น PDF",
+            subtitle="รวบรวมรูปภาพของคุณเป็นเอกสาร PDF ลิงก์เดียว",
+            bullet_points=[
+                "สร้างหน้าเอกสาร PDF คุณภาพสูงจากภาพถ่าย",
+                "สามารถส่งได้ทีละหลายรูป"
+            ],
+            footer_text="📎 ส่งรูปภาพมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
+            quick_replies=std_qr
+        )
+    elif mode == "resize":
+        reply_premium_info_flex(
+            reply_token,
+            title="📄 จัดรูปลง A4 (สร้าง PDF)",
+            subtitle="ปรับขนาดสัดส่วนรูปถ่ายให้ลงล็อกกระดาษ A4",
+            bullet_points=[
+                "เหมาะสำหรับรูปถ่ายเอกสารสำคัญ (สมัครเรียน, กยศ.)",
+                "จัดวางหน้ากระดาษ A4 สวยงามเป็นสัดส่วน"
+            ],
+            footer_text="📎 ส่งรูปภาพมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
+            quick_replies=std_qr
+        )
+    elif mode == "compress":
+        reply_premium_info_flex(
+            reply_token,
+            title="🖼️ ย่อขนาดไฟล์รูป",
+            subtitle="ลดขนาดไฟล์รูปภาพเพื่อความสะดวกในการส่งต่อ",
+            bullet_points=[
+                "บีบอัดขนาดไฟล์ (KB/MB) โดยไม่เสียสัดส่วนเดิม",
+                "ส่งรูปที่ย่อแล้วกลับไปให้ในแชททันที"
+            ],
+            footer_text="📎 ส่งรูปภาพมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
+            quick_replies=std_qr
+        )
+    else:
+        reply_text_with_quick_replies(
+            reply_token,
+            "📎 ส่งรูปมาได้เลยครับ หรือกด 'ยกเลิก' เพื่อออก",
+            std_qr
+        )
 
 
 def reply_submenu(reply_token, category: str) -> bool:
@@ -3092,7 +3440,7 @@ def reply_submenu(reply_token, category: str) -> bool:
       }
     }
     
-    alt_text = f"🤖 LouisAI PDF Bot - {title}"
+    alt_text = f"🤖 LouisAI Assistant - {title}"
     
     try:
         res = requests.post(
