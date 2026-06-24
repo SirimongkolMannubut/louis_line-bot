@@ -457,7 +457,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
 
     # ── PDF flows ──
     if normalized in PDF_COMMANDS:
-        restart_flow(reply_token, session_key, "pdf")
+        reply_pdf_creator_link(reply_token)
         return
     if normalized in RECEIPT_COMMANDS:
         restart_flow(reply_token, session_key, "ocr_summary_pdf")
@@ -1673,7 +1673,7 @@ def build_welcome_message():
         f"สวัสดีครับ ผมคือ {BOT_NAME} 🤖\n\n"
         "ผมช่วยได้หลายอย่างครับ เช่น\n"
         "🧾 ส่งสลิปมาตรง ๆ → ผมอ่านยอดและรวมให้เลย\n"
-        "📄 'ทำ PDF' → รวมรูปเป็น PDF\n"
+        "📄 'ทำ PDF' → ทำไฟล์ PDF ผ่านเว็บ\n"
         "💰 'ค่าน้ำ 270' → บันทึกรายจ่าย\n"
         "📝 'บันทึก ข้อความ' → จดบันทึก\n\n"
         "พิมพ์ 'เมนู' เพื่อดูทุกฟีเจอร์ หรือถามได้เลยครับ 💬"
@@ -2220,7 +2220,7 @@ def build_submenu_message(category: str) -> str:
             "🧾 สรุปใบเสร็จ\n"
             "→ อ่านบิลและใบเสร็จ\n\n"
             "📄 ทำ PDF\n"
-            "→ รวมรูปเป็น PDF\n"
+            "→ ทำไฟล์ PDF ผ่านเว็บ\n"
             "─────────────────\n"
             "👉 พิมพ์ เมนู เพื่อกลับ"
         )
@@ -2492,6 +2492,95 @@ def reply_pdf_success(reply_token, title, safe_name, detail_text, file_url):
     except Exception as e:
         print(f"[LINE] Flex message exception: {e}. Falling back to text.")
         fallback_text = f"✅ สร้าง PDF เรียบร้อยแล้วครับ 📄\n{detail_text} → {safe_name}.pdf\n🔗 {file_url}"
+        try:
+            reply_text(reply_token, fallback_text)
+        except Exception as fallback_err:
+            print(f"[LINE] Fallback reply_text also failed: {fallback_err}")
+
+
+def reply_pdf_creator_link(reply_token):
+    alt_text = "📄 แปลงรูปภาพเป็นไฟล์ PDF"
+    
+    contents = {
+      "type": "bubble",
+      "body": {
+        "type": "box",
+        "layout": "vertical",
+        "contents": [
+          {
+            "type": "text",
+            "text": "📄 PDF CREATOR",
+            "weight": "bold",
+            "color": "#10b981",
+            "size": "sm"
+          },
+          {
+            "type": "text",
+            "text": "แปลงรูปภาพเป็น PDF",
+            "weight": "bold",
+            "size": "xl",
+            "margin": "md",
+            "color": "#111111"
+          },
+          {
+            "type": "text",
+            "text": "สามารถแปลงรูปภาพ หรือเอกสารหลายๆ รูป ให้เป็นไฟล์ PDF บนเว็บแอปพลิเคชันของเราได้เลยครับ มีระบบครอปตัดและหมุนรูปภาพให้ใช้งานด้วย",
+            "wrap": True,
+            "color": "#555555",
+            "size": "sm",
+            "margin": "md"
+          }
+        ]
+      },
+      "footer": {
+        "type": "box",
+        "layout": "vertical",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "button",
+            "style": "primary",
+            "height": "sm",
+            "color": "#10b981",
+            "action": {
+              "type": "uri",
+              "label": "👉 เริ่มทำ PDF บนเว็บ",
+              "uri": LIFF_PDF_CREATOR_URL
+            }
+          }
+        ]
+      }
+    }
+    
+    try:
+        res = requests.post(
+            LINE_REPLY_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "replyToken": reply_token,
+                "messages": [
+                    {
+                        "type": "flex",
+                        "altText": alt_text,
+                        "contents": contents
+                    }
+                ],
+            },
+            timeout=30,
+        )
+        if res.status_code != 200:
+            print(f"[LINE] PDF creator link Flex message failed with status {res.status_code}: {res.text}")
+        res.raise_for_status()
+    except Exception as e:
+        print(f"[LINE] PDF creator link Flex message exception: {e}. Falling back to text.")
+        fallback_text = (
+            "📄 รวมรูปเป็น PDF ผ่านเว็บแอปพลิเคชัน\n\n"
+            "ท่านสามารถแปลงรูปเป็น PDF พร้อมทั้งครอบภาพและหมุนภาพได้อย่างอิสระผ่านลิงก์ด้านล่างนี้ได้เลยครับ:\n"
+            f"🔗 {LIFF_PDF_CREATOR_URL}"
+        )
         try:
             reply_text(reply_token, fallback_text)
         except Exception as fallback_err:
