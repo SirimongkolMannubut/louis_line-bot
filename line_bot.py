@@ -3130,16 +3130,7 @@ def reply_premium_info_flex(
 
 
 def reply_flow_start_flex(reply_token, mode):
-    std_qr = [
-        {"label": "✅ เสร็จแล้ว", "text": "เสร็จแล้ว"},
-        {"label": "❌ ยกเลิก", "text": "ยกเลิก"}
-    ]
-    doc_qr = [
-        {"label": "📝 สรุปแบบสั้น", "text": "สรุปแบบสั้น"},
-        {"label": "📖 สรุปแบบละเอียด", "text": "สรุปแบบละเอียด"},
-        {"label": "🎓 สรุปเพื่อสอบ", "text": "สรุปเพื่อสอบ"},
-        {"label": "📋 สรุปเป็นข้อ", "text": "สรุปเป็นข้อ"},
-        {"label": "🧠 สรุปเป็น mind map", "text": "สรุปเป็น mind map"},
+    cancel_qr = [
         {"label": "❌ ยกเลิก", "text": "ยกเลิก"}
     ]
 
@@ -3154,8 +3145,8 @@ def reply_flow_start_flex(reply_token, mode):
                 "บันทึกข้อมูลและส่งออกรายงานสรุปการเงินได้",
                 "ส่งรูปภาพเพิ่มเติมได้ตลอดเวลา"
             ],
-            footer_text="📎 ส่งรูปบิลหรือสลิปมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
-            quick_replies=std_qr
+            footer_text="📎 ส่งรูปบิลหรือสลิปมาได้เลยครับ",
+            quick_replies=cancel_qr
         )
     elif mode == "doc_summary":
         reply_premium_info_flex(
@@ -3165,10 +3156,10 @@ def reply_flow_start_flex(reply_token, mode):
             bullet_points=[
                 "ส่งรูปชีทเรียน หนังสือเรียน หรือเอกสารได้หลายภาพ",
                 "วิเคราะห์และสรุปภาษาไทยและอังกฤษอย่างชาญฉลาด",
-                "เลือกโหมดสรุปที่ชอบจากปุ่ม Quick Reply ได้ทันที"
+                "เลือกโหมดสรุปเมื่อส่งรูปภาพครบถ้วนแล้ว"
             ],
-            footer_text="📎 ส่งรูปเอกสารมาได้เลยครับ เสร็จแล้วกดปุ่มเลือกโหมดสรุป",
-            quick_replies=doc_qr
+            footer_text="📎 ส่งรูปเอกสารมาได้เลยครับ",
+            quick_replies=cancel_qr
         )
     elif mode == "slip":
         reply_premium_info_flex(
@@ -3179,8 +3170,8 @@ def reply_flow_start_flex(reply_token, mode):
                 "สแกนข้อมูลจากสลิปอัตโนมัติ (ยอดเงิน/วันเวลา)",
                 "ช่วยจดบันทึกประวัติการเงินของคุณให้อย่างรวดเร็ว"
             ],
-            footer_text="📎 ส่งรูปสลิปมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
-            quick_replies=std_qr
+            footer_text="📎 ส่งรูปสลิปมาได้เลยครับ",
+            quick_replies=cancel_qr
         )
     elif mode == "multi_slip":
         reply_premium_info_flex(
@@ -3189,11 +3180,11 @@ def reply_flow_start_flex(reply_token, mode):
             subtitle="วิเคราะห์และรวมยอดจากหลายสลิปในแชทเดียว",
             bullet_points=[
                 "ดึงยอดเงินโอน วันเวลา และข้อมูลปลายทาง",
-                "คำนวณและแสดงผลยอดรวมทั้งหมดในใบเดียว",
+                "คำนวณและแสดงผลยอดรวมทั้งหมด in ใบเดียว",
                 "สะดวกและรวดเร็ว ไม่จำกัดจำนวนสลิป"
             ],
-            footer_text="📎 ส่งรูปสลิปมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
-            quick_replies=std_qr
+            footer_text="📎 ส่งรูปสลิปมาได้เลยครับ",
+            quick_replies=cancel_qr
         )
     elif mode == "pdf":
         reply_premium_info_flex(
@@ -3204,8 +3195,8 @@ def reply_flow_start_flex(reply_token, mode):
                 "สร้างหน้าเอกสาร PDF คุณภาพสูงจากภาพถ่าย",
                 "สามารถส่งได้ทีละหลายรูป"
             ],
-            footer_text="📎 ส่งรูปภาพมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
-            quick_replies=std_qr
+            footer_text="📎 ส่งรูปภาพมาได้เลยครับ",
+            quick_replies=cancel_qr
         )
     elif mode == "resize":
         reply_premium_info_flex(
@@ -3216,8 +3207,8 @@ def reply_flow_start_flex(reply_token, mode):
                 "เหมาะสำหรับรูปถ่ายเอกสารสำคัญ (สมัครเรียน, กยศ.)",
                 "จัดวางหน้ากระดาษ A4 สวยงามเป็นสัดส่วน"
             ],
-            footer_text="📎 ส่งรูปภาพมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
-            quick_replies=std_qr
+            footer_text="📎 ส่งรูปภาพมาได้เลยครับ",
+            quick_replies=cancel_qr
         )
     elif mode == "compress":
         reply_premium_info_flex(
@@ -3228,14 +3219,14 @@ def reply_flow_start_flex(reply_token, mode):
                 "บีบอัดขนาดไฟล์ (KB/MB) โดยไม่เสียสัดส่วนเดิม",
                 "ส่งรูปที่ย่อแล้วกลับไปให้ในแชททันที"
             ],
-            footer_text="📎 ส่งรูปภาพมาได้เลยครับ เสร็จแล้วกดปุ่มด้านล่าง",
-            quick_replies=std_qr
+            footer_text="📎 ส่งรูปภาพมาได้เลยครับ",
+            quick_replies=cancel_qr
         )
     else:
         reply_text_with_quick_replies(
             reply_token,
             "📎 ส่งรูปมาได้เลยครับ หรือกด 'ยกเลิก' เพื่อออก",
-            std_qr
+            cancel_qr
         )
 
 
