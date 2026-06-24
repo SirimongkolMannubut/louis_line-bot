@@ -3129,22 +3129,22 @@ def reply_submenu(reply_token, category: str) -> bool:
 
 
 def reply_main_menu(reply_token):
-    alt_text = "🤖 LouisAI PDF Bot - เมนูหลัก"
+    alt_text = "🤖 LouisAI Assistant - เมนูหลัก"
     contents = {
       "type": "bubble",
       "size": "mega",
       "body": {
         "type": "box",
         "layout": "vertical",
-        "backgroundColor": "#F8F9FA",
+        "backgroundColor": "#0F172A",
         "paddingAll": "12px",
         "contents": [
           {
             "type": "box",
             "layout": "vertical",
-            "backgroundColor": "#FFFFFF",
+            "backgroundColor": "#1E293B",
             "cornerRadius": "20px",
-            "borderColor": "#EAEAEA",
+            "borderColor": "#334155",
             "borderWidth": "1px",
             "paddingAll": "16px",
             "contents": [
@@ -3155,30 +3155,30 @@ def reply_main_menu(reply_token):
                 "contents": [
                   {
                     "type": "text",
-                    "text": "🤖 LouisAI PDF Bot",
+                    "text": "🤖 LouisAI Assistant",
                     "weight": "bold",
                     "size": "lg",
-                    "color": "#333333"
+                    "color": "#FFFFFF"
                   },
                   {
                     "type": "text",
                     "text": "AI เอกสาร • PDF • การเงิน",
                     "size": "xs",
-                    "color": "#777777",
+                    "color": "#94A3B8",
                     "margin": "xs"
                   }
                 ]
               },
               {
                 "type": "separator",
-                "color": "#EAEAEA"
+                "color": "#334155"
               },
               {
                 "type": "text",
                 "text": "⭐ ฟังก์ชันยอดนิยม",
                 "weight": "bold",
                 "size": "sm",
-                "color": "#333333",
+                "color": "#FFFFFF",
                 "margin": "md"
               },
               {
@@ -3190,10 +3190,10 @@ def reply_main_menu(reply_token):
                   {
                     "type": "box",
                     "layout": "vertical",
-                    "backgroundColor": "#2ECC71",
-                    "cornerRadius": "md",
-                    "paddingTop": "8px",
-                    "paddingBottom": "8px",
+                    "backgroundColor": "#334155",
+                    "cornerRadius": "lg",
+                    "paddingTop": "10px",
+                    "paddingBottom": "10px",
                     "alignItems": "center",
                     "action": {
                       "type": "message",
@@ -3213,10 +3213,10 @@ def reply_main_menu(reply_token):
                   {
                     "type": "box",
                     "layout": "vertical",
-                    "backgroundColor": "#2ECC71",
-                    "cornerRadius": "md",
-                    "paddingTop": "8px",
-                    "paddingBottom": "8px",
+                    "backgroundColor": "#334155",
+                    "cornerRadius": "lg",
+                    "paddingTop": "10px",
+                    "paddingBottom": "10px",
                     "alignItems": "center",
                     "action": {
                       "type": "message",
@@ -3236,10 +3236,10 @@ def reply_main_menu(reply_token):
                   {
                     "type": "box",
                     "layout": "vertical",
-                    "backgroundColor": "#2ECC71",
-                    "cornerRadius": "md",
-                    "paddingTop": "8px",
-                    "paddingBottom": "8px",
+                    "backgroundColor": "#2563EB",
+                    "cornerRadius": "lg",
+                    "paddingTop": "10px",
+                    "paddingBottom": "10px",
                     "alignItems": "center",
                     "action": {
                       "type": "uri",
@@ -3249,7 +3249,7 @@ def reply_main_menu(reply_token):
                     "contents": [
                       {
                         "type": "text",
-                        "text": "📄 ทำ PDF",
+                        "text": "📄 ทำ PDF บนเว็บ",
                         "color": "#FFFFFF",
                         "weight": "bold",
                         "size": "sm"
@@ -3259,10 +3259,10 @@ def reply_main_menu(reply_token):
                   {
                     "type": "box",
                     "layout": "vertical",
-                    "backgroundColor": "#2ECC71",
-                    "cornerRadius": "md",
-                    "paddingTop": "8px",
-                    "paddingBottom": "8px",
+                    "backgroundColor": "#334155",
+                    "cornerRadius": "lg",
+                    "paddingTop": "10px",
+                    "paddingBottom": "10px",
                     "alignItems": "center",
                     "action": {
                       "type": "message",
@@ -3282,10 +3282,10 @@ def reply_main_menu(reply_token):
                   {
                     "type": "box",
                     "layout": "vertical",
-                    "backgroundColor": "#2ECC71",
-                    "cornerRadius": "md",
-                    "paddingTop": "8px",
-                    "paddingBottom": "8px",
+                    "backgroundColor": "#334155",
+                    "cornerRadius": "lg",
+                    "paddingTop": "10px",
+                    "paddingBottom": "10px",
                     "alignItems": "center",
                     "action": {
                       "type": "message",
@@ -3309,7 +3309,7 @@ def reply_main_menu(reply_token):
                 "text": "📂 บริการอื่นๆ",
                 "weight": "bold",
                 "size": "sm",
-                "color": "#333333",
+                "color": "#FFFFFF",
                 "margin": "md"
               },
               {
@@ -3326,11 +3326,10 @@ def reply_main_menu(reply_token):
                       {
                         "type": "box",
                         "layout": "vertical",
-                        "borderWidth": "1px",
-                        "borderColor": "#EAEAEA",
-                        "cornerRadius": "md",
-                        "paddingTop": "8px",
-                        "paddingBottom": "8px",
+                        "backgroundColor": "#334155",
+                        "cornerRadius": "lg",
+                        "paddingTop": "10px",
+                        "paddingBottom": "10px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -3343,7 +3342,7 @@ def reply_main_menu(reply_token):
                             "type": "text",
                             "text": "📁 เอกสาร",
                             "weight": "bold",
-                            "color": "#333333",
+                            "color": "#FFFFFF",
                             "size": "xs"
                           }
                         ]
@@ -3351,11 +3350,10 @@ def reply_main_menu(reply_token):
                       {
                         "type": "box",
                         "layout": "vertical",
-                        "borderWidth": "1px",
-                        "borderColor": "#EAEAEA",
-                        "cornerRadius": "md",
-                        "paddingTop": "8px",
-                        "paddingBottom": "8px",
+                        "backgroundColor": "#334155",
+                        "cornerRadius": "lg",
+                        "paddingTop": "10px",
+                        "paddingBottom": "10px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -3368,7 +3366,7 @@ def reply_main_menu(reply_token):
                             "type": "text",
                             "text": "💰 การเงิน",
                             "weight": "bold",
-                            "color": "#333333",
+                            "color": "#FFFFFF",
                             "size": "xs"
                           }
                         ]
@@ -3383,11 +3381,10 @@ def reply_main_menu(reply_token):
                       {
                         "type": "box",
                         "layout": "vertical",
-                        "borderWidth": "1px",
-                        "borderColor": "#EAEAEA",
-                        "cornerRadius": "md",
-                        "paddingTop": "8px",
-                        "paddingBottom": "8px",
+                        "backgroundColor": "#334155",
+                        "cornerRadius": "lg",
+                        "paddingTop": "10px",
+                        "paddingBottom": "10px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -3400,7 +3397,7 @@ def reply_main_menu(reply_token):
                             "type": "text",
                             "text": "🎫 สลิป",
                             "weight": "bold",
-                            "color": "#333333",
+                            "color": "#FFFFFF",
                             "size": "xs"
                           }
                         ]
@@ -3408,11 +3405,10 @@ def reply_main_menu(reply_token):
                       {
                         "type": "box",
                         "layout": "vertical",
-                        "borderWidth": "1px",
-                        "borderColor": "#EAEAEA",
-                        "cornerRadius": "md",
-                        "paddingTop": "8px",
-                        "paddingBottom": "8px",
+                        "backgroundColor": "#334155",
+                        "cornerRadius": "lg",
+                        "paddingTop": "10px",
+                        "paddingBottom": "10px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -3425,7 +3421,7 @@ def reply_main_menu(reply_token):
                             "type": "text",
                             "text": "📅 นัดหมาย",
                             "weight": "bold",
-                            "color": "#333333",
+                            "color": "#FFFFFF",
                             "size": "xs"
                           }
                         ]
@@ -3440,11 +3436,10 @@ def reply_main_menu(reply_token):
                       {
                         "type": "box",
                         "layout": "vertical",
-                        "borderWidth": "1px",
-                        "borderColor": "#EAEAEA",
-                        "cornerRadius": "md",
-                        "paddingTop": "8px",
-                        "paddingBottom": "8px",
+                        "backgroundColor": "#334155",
+                        "cornerRadius": "lg",
+                        "paddingTop": "10px",
+                        "paddingBottom": "10px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -3457,7 +3452,7 @@ def reply_main_menu(reply_token):
                             "type": "text",
                             "text": "👤 โปรไฟล์",
                             "weight": "bold",
-                            "color": "#333333",
+                            "color": "#FFFFFF",
                             "size": "xs"
                           }
                         ]
@@ -3465,11 +3460,10 @@ def reply_main_menu(reply_token):
                       {
                         "type": "box",
                         "layout": "vertical",
-                        "borderWidth": "1px",
-                        "borderColor": "#EAEAEA",
-                        "cornerRadius": "md",
-                        "paddingTop": "8px",
-                        "paddingBottom": "8px",
+                        "backgroundColor": "#334155",
+                        "cornerRadius": "lg",
+                        "paddingTop": "10px",
+                        "paddingBottom": "10px",
                         "alignItems": "center",
                         "justifyContent": "center",
                         "action": {
@@ -3482,7 +3476,7 @@ def reply_main_menu(reply_token):
                             "type": "text",
                             "text": "⚙️ เครื่องมือ",
                             "weight": "bold",
-                            "color": "#333333",
+                            "color": "#FFFFFF",
                             "size": "xs"
                           }
                         ]
@@ -3492,11 +3486,10 @@ def reply_main_menu(reply_token):
                   {
                     "type": "box",
                     "layout": "vertical",
-                    "borderWidth": "1px",
-                    "borderColor": "#EAEAEA",
-                    "cornerRadius": "md",
-                    "paddingTop": "8px",
-                    "paddingBottom": "8px",
+                    "backgroundColor": "#334155",
+                    "cornerRadius": "lg",
+                    "paddingTop": "10px",
+                    "paddingBottom": "10px",
                     "alignItems": "center",
                     "justifyContent": "center",
                     "action": {
@@ -3509,7 +3502,7 @@ def reply_main_menu(reply_token):
                         "type": "text",
                         "text": "🌐 AI Assistant",
                         "weight": "bold",
-                        "color": "#333333",
+                        "color": "#FFFFFF",
                         "size": "xs"
                       }
                     ]
@@ -3524,13 +3517,13 @@ def reply_main_menu(reply_token):
                 "contents": [
                   {
                     "type": "separator",
-                    "color": "#EAEAEA"
+                    "color": "#334155"
                   },
                   {
                     "type": "text",
                     "text": "👉 แตะปุ่มเพื่อเริ่มใช้งาน",
                     "size": "xxs",
-                    "color": "#777777",
+                    "color": "#94A3B8",
                     "align": "center",
                     "margin": "sm",
                     "wrap": True
@@ -3571,6 +3564,7 @@ def reply_main_menu(reply_token):
             reply_text(reply_token, build_help_message())
         except Exception as fallback_err:
             print(f"[LINE] Main menu fallback reply_text also failed: {fallback_err}")
+
 
 
 def build_file_url(request, filename):
