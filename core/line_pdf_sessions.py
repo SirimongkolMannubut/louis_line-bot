@@ -1,9 +1,11 @@
 import json
 import os
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
 SESSIONS_FILE = "memory/line_sessions.json"
+_sessions_lock = threading.Lock()
 
 
 def _now_iso() -> str:
@@ -15,20 +17,22 @@ def _ensure_parent() -> None:
 
 
 def load_sessions() -> dict[str, Any]:
-    if not os.path.exists(SESSIONS_FILE):
-        return {}
-    try:
-        with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    with _sessions_lock:
+        if not os.path.exists(SESSIONS_FILE):
+            return {}
+        try:
+            with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
 
 
 def save_sessions(sessions: dict[str, Any]) -> None:
-    _ensure_parent()
-    with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
-        json.dump(sessions, f, ensure_ascii=False, indent=2)
+    with _sessions_lock:
+        _ensure_parent()
+        with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(sessions, f, ensure_ascii=False, indent=2)
 
 
 def _default_session() -> dict[str, Any]:

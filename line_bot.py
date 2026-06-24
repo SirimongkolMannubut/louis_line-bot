@@ -8,6 +8,8 @@ import mimetypes
 import os
 import re
 import uuid
+import threading
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -221,6 +223,47 @@ app = FastAPI(title=f"{BOT_NAME} LINE Bot")
 app.mount("/files", StaticFiles(directory=str(GENERATED_DIR)), name="files")
 
 start_scheduler()
+
+
+class ImageDebouncer:
+    def __init__(self, delay_seconds: float = 2.5):
+        self.delay_seconds = delay_seconds
+        self.lock = threading.Lock()
+        self.batches = {}  # session_key -> {"timer": threading.Timer, "images": list[dict]}
+
+    def add_image(self, session_key: str, temp_path: str, reply_token: str, request_base_url: str, callback) -> None:
+        with self.lock:
+            if session_key not in self.batches:
+                self.batches[session_key] = {
+                    "timer": None,
+                    "images": []
+                }
+            batch = self.batches[session_key]
+            
+            # Cancel existing timer
+            if batch["timer"] is not None:
+                batch["timer"].cancel()
+            
+            # Add image to batch
+            batch["images"].append({
+                "temp_path": temp_path,
+                "reply_token": reply_token,
+                "request_base_url": request_base_url
+            })
+            
+            # Schedule timer
+            timer = threading.Timer(self.delay_seconds, self._fire, args=(session_key, callback))
+            batch["timer"] = timer
+            timer.start()
+
+    def _fire(self, session_key: str, callback) -> None:
+        with self.lock:
+            batch = self.batches.pop(session_key, None)
+        if batch and batch["images"]:
+            callback(session_key, batch["images"])
+
+
+image_debouncer = ImageDebouncer()
 
 
 @app.get("/")
@@ -789,206 +832,272 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
 
 # ── Image ─────────────────────────────────────────────────────────────────────
 def handle_image_message(reply_token, session_key, message_id, request):
+    try:
+        content, content_type = download_line_message_content(message_id)
+        ext = guess_extension(content_type)
+        temp_path = UPLOAD_DIR / f"raw_recv_{uuid.uuid4().hex}{ext}"
+        temp_path.write_bytes(content)
+    except Exception as e:
+        print(f"[LINE] Error downloading message content {message_id}: {e}")
+        return
+
+    request_base_url = str(request.base_url) if request else ""
+    image_debouncer.add_image(
+        session_key=session_key,
+        temp_path=str(temp_path),
+        reply_token=reply_token,
+        request_base_url=request_base_url,
+        callback=process_image_batch
+    )
+
+
+def image_received_msg_suffix(mode):
+    return {
+        "ocr_summary_pdf": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' ให้ผมวิเคราะห์ + สรุป + สร้าง PDF ครับ",
+        "doc_summary": "ส่งเพิ่มได้อีก หรือพิมพ์เลือกโหมดสรุป (เช่น 'สรุปแบบสั้น' / 'เสร็จแล้ว') ได้เลยครับ",
+        "slip": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' ให้ผมอ่านและบันทึกยอดครับ",
+        "pdf": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อรวบรวมเป็นไฟล์ PDF ครับ",
+        "resize": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อนำมาจัดหน้า A4 PDF ครับ",
+        "compress": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เมื่อย่อรูปครบตามที่ต้องการแล้วครับ",
+    }.get(mode, "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF ครับ")
+
+
+def process_image_batch(session_key, batch_images):
+    if not batch_images:
+        return
+        
+    latest_reply_token = batch_images[-1]["reply_token"]
+    request_base_url = batch_images[-1]["request_base_url"]
+    
     session = get_session(session_key)
     state = session.get("state", "idle")
     mode = session.get("mode")
-    current_mode = session.get("current_mode")
-
-    # ── ดาวน์โหลดรูปก่อนเสมอ ──
-    content, content_type = download_line_message_content(message_id)
-    ext = guess_extension(content_type)
-
-    # ── นอก flow: auto-detect ──
-    if state != "waiting_for_images":
-        tmp_path = UPLOAD_DIR / f"tmp_{uuid.uuid4().hex}{ext}"
-        tmp_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path.write_bytes(content)
-
-        # โหมด KB
-        pending_kb = get_session(session_key).get("pending_kb", "")
-        if pending_kb:
-            try:
-                ocr_text = extract_text_from_images([str(tmp_path)])
-                if ocr_text:
-                    add_document(
-                        session_key, pending_kb, ocr_text, {"source": pending_kb}
-                    )
-                    s = get_session(session_key)
-                    s.pop("pending_kb", None)
-                    reply_text(reply_token, f"📚 บันทึกเอกสาร '{pending_kb}' แล้วครับ")
-                else:
-                    reply_text(reply_token, "อ่านข้อความไม่ได้ครับ รูปไม่ชัดพอ")
-            except Exception as e:
-                reply_text(reply_token, f"เกิดข้อผิดพลาดครับ: {e}")
-            finally:
-                tmp_path.unlink(missing_ok=True)
-            return
-
-        try:
-            ocr_text = extract_text_from_images([str(tmp_path)])
-        except Exception:
-            ocr_text = ""
-
-        # Auto-detect สลิป → เริ่ม multi_slip อัตโนมัติ
-        if ocr_text and _looks_like_slip(ocr_text):
-            user_dir = UPLOAD_DIR / session_key.replace(":", "_")
-            user_dir.mkdir(parents=True, exist_ok=True)
-            saved_path = user_dir / f"{uuid.uuid4().hex}{ext}"
-            saved_path.write_bytes(content)
-            tmp_path.unlink(missing_ok=True)
-
-            start_pdf_flow(session_key, mode="multi_slip")
-            add_image(session_key, str(saved_path))
-
-            # ใช้ add_slip_entry เก็บ full data เหมือนใน flow — ไม่ต้อง re-read
-            slip = parse_slip(ocr_text)
-            amount = slip.get("amount") or 0.0
-            add_slip_entry(
-                session_key,
-                {
-                    "amount": amount,
-                    "bank": slip.get("bank", ""),
-                    "ref": slip.get("ref", ""),
-                    "date": slip.get("datetime", ""),
-                    "img_path": str(saved_path),
-                },
-            )
-
-            bank_line = f"🏦 {slip['bank']}\n" if slip.get("bank") else ""
-            if amount > 0:
-                reply_text(
-                    reply_token,
-                    f"🧾 ตรวจพบสลิปโอนเงินครับ\n"
-                    f"💰 ยอด: {amount:,.2f} บาท\n{bank_line}\n"
-                    f"ส่งสลิปเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูยอดรวม",
-                )
-            else:
-                reply_text(
-                    reply_token,
-                    "🧾 ตรวจพบสลิปครับ แต่อ่านยอดไม่ชัด\n"
-                    "ส่งสลิปเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูยอดรวม",
-                )
-            return
-
-        # ใช้ Vision LLM วิเคราะห์รูปโดยตรง (แม่นยำกว่า Tesseract + AI)
-        try:
-            analysis = analyze_image(str(tmp_path))
-            reply_text(reply_token, f"🔍 วิเคราะห์รูป:\n{analysis}")
-        except Exception:
-            reply_text(
-                reply_token,
-                "📸 รับรูปแล้วครับ\n\n"
-                "🧾 ถ้าเป็นสลิปโอนเงิน → 'รวมสลิป'\n"
-                "📄 ถ้าต้องการรวมรูปเป็น PDF → 'ทำ PDF'\n"
-                "🔍 ถ้าต้องการอ่านเอกสาร → 'สรุปใบเสร็จ'",
-            )
-        tmp_path.unlink(missing_ok=True)
-        return
-
-    # ── ใน flow: บันทึกรูปตามปกติ ──
+    
     user_dir = UPLOAD_DIR / session_key.replace(":", "_")
     user_dir.mkdir(parents=True, exist_ok=True)
-    image_path = user_dir / f"{uuid.uuid4().hex}{ext}"
-    image_path.write_bytes(content)
-
-    if mode == "compress":
-        try:
-            from PIL import Image as PILImage
-            from PIL import ImageOps as PILOps
-            import io
-
-            img = PILImage.open(io.BytesIO(content))
-            img = PILOps.exif_transpose(img)
-            img.thumbnail((1280, 1280))
-
-            filename = f"compressed-{uuid.uuid4().hex}.jpg"
-            out_path = GENERATED_DIR / filename
-            img.save(out_path, "JPEG", optimize=True, quality=85)
-
-            file_url = build_file_url(request, filename)
-
-            requests.post(
-                LINE_REPLY_ENDPOINT,
-                headers={
-                    "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "replyToken": reply_token,
-                    "messages": [
-                        {
-                            "type": "image",
-                            "originalContentUrl": file_url,
-                            "previewImageUrl": file_url,
-                        },
-                        {
-                            "type": "text",
-                            "text": f"✅ ย่อขนาดรูปภาพเรียบร้อยแล้วครับ!\n🔗 {file_url}\n\nส่งรูปเพิ่มเติมเพื่อย่อต่อได้เลย หรือพิมพ์ 'เสร็จแล้ว' เพื่อเสร็จสิ้นครับ",
-                        },
-                    ],
-                },
-                timeout=30,
-            ).raise_for_status()
-        except Exception as e:
-            reply_text(reply_token, f"เกิดข้อผิดพลาดในการย่อรูปครับ: {e}")
+    
+    permanent_paths = []
+    for item in batch_images:
+        temp_path = Path(item["temp_path"])
+        if temp_path.exists():
+            ext = temp_path.suffix
+            perm_path = user_dir / f"{uuid.uuid4().hex}{ext}"
+            try:
+                shutil.move(str(temp_path), str(perm_path))
+                permanent_paths.append(str(perm_path))
+            except Exception as e:
+                print(f"[LINE] Error moving file {temp_path} to {perm_path}: {e}")
+                temp_path.unlink(missing_ok=True)
+                
+    if not permanent_paths:
         return
-
-    if mode == "resize":
-        try:
-            from PIL import Image as PILImage
-            from PIL import ImageOps as PILOps
-
-            img = PILImage.open(image_path)
-            img = PILOps.exif_transpose(img)
-            img.thumbnail((1240, 1754))
-            img.save(image_path, optimize=True, quality=85)
-        except Exception:
-            pass
-
-    updated = add_image(session_key, str(image_path))
-    count = len(updated.get("images", []))
-
-    # ── multi_slip: อ่านสลิปทันทีและเก็บ full data ──
-    if mode == "multi_slip":
-        try:
-            slip = read_slip(str(image_path))
-            amount = slip.get("amount") or 0.0
-        except Exception:
-            slip = {"amount": 0.0, "bank": "", "ref": "", "datetime": ""}
-            amount = 0.0
-
-        # เก็บทั้ง full data และ amount ในครั้งเดียว
-        updated2 = add_slip_entry(
-            session_key,
-            {
-                "amount": amount,
-                "bank": slip.get("bank", ""),
-                "ref": slip.get("ref", ""),
-                "date": slip.get("datetime", ""),
-                "img_path": str(image_path),
-            },
-        )
-        slip_amounts = updated2.get("slip_amounts", [])
-        total = sum(a for a in slip_amounts if a)
-        n = len(slip_amounts)
-        bank_str = f"  ({slip.get('bank')})" if slip.get("bank") else ""
-        if amount > 0:
-            reply_text(
-                reply_token,
-                f"🧾 สลิปที่ {n}: {amount:,.2f} บาท{bank_str}\n"
-                f"💰 ยอดสะสม {n} รายการ: {total:,.2f} บาท\n\n"
-                f"ส่งสลิปเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูสรุป",
-            )
+        
+    if state != "waiting_for_images":
+        # Outside flow: Auto-detect
+        slips_found = []
+        for img_path in permanent_paths:
+            try:
+                ocr_text = extract_text_from_images([img_path])
+            except Exception:
+                ocr_text = ""
+            if ocr_text and _looks_like_slip(ocr_text):
+                try:
+                    slip = parse_slip(ocr_text)
+                    amount = slip.get("amount") or 0.0
+                    slips_found.append({
+                        "amount": amount,
+                        "bank": slip.get("bank", ""),
+                        "ref": slip.get("ref", ""),
+                        "date": slip.get("datetime", ""),
+                        "img_path": img_path,
+                    })
+                except Exception:
+                    slips_found.append({
+                        "amount": 0.0,
+                        "bank": "",
+                        "ref": "",
+                        "date": "",
+                        "img_path": img_path,
+                    })
+                    
+        if slips_found:
+            start_pdf_flow(session_key, mode="multi_slip")
+            for img_path in permanent_paths:
+                add_image(session_key, img_path)
+                
+            parsed_paths = {s["img_path"] for s in slips_found}
+            for img_path in permanent_paths:
+                if img_path in parsed_paths:
+                    slip_entry = next(s for s in slips_found if s["img_path"] == img_path)
+                    add_slip_entry(session_key, slip_entry)
+                else:
+                    add_slip_entry(session_key, {
+                        "amount": 0.0,
+                        "bank": "",
+                        "ref": "",
+                        "date": "",
+                        "img_path": img_path,
+                    })
+            _prompt_slip_type_selection(latest_reply_token, session_key)
+            return
+            
+        if len(permanent_paths) == 1:
+            img_path = permanent_paths[0]
+            pending_kb = get_session(session_key).get("pending_kb", "")
+            if pending_kb:
+                try:
+                    ocr_text = extract_text_from_images([img_path])
+                    if ocr_text:
+                        add_document(session_key, pending_kb, ocr_text, {"source": pending_kb})
+                        s = get_session(session_key)
+                        s.pop("pending_kb", None)
+                        reply_text(latest_reply_token, f"📚 บันทึกเอกสาร '{pending_kb}' แล้วครับ")
+                    else:
+                        reply_text(latest_reply_token, "อ่านข้อความไม่ได้ครับ รูปไม่ชัดพอ")
+                except Exception as e:
+                    reply_text(latest_reply_token, f"เกิดข้อผิดพลาดครับ: {e}")
+                finally:
+                    Path(img_path).unlink(missing_ok=True)
+                return
+                
+            try:
+                analysis = analyze_image(img_path)
+                reply_text(latest_reply_token, f"🔍 วิเคราะห์รูป:\n{analysis}")
+            except Exception:
+                reply_text(
+                    latest_reply_token,
+                    "📸 รับรูปแล้วครับ\n\n"
+                    "🧾 ถ้าเป็นสลิปโอนเงิน → พิมพ์ 'รวมสลิป'\n"
+                    "📄 ถ้าต้องการรวมรูปเป็น PDF → พิมพ์ 'ทำ PDF'\n"
+                    "🔍 ถ้าต้องการอ่านเอกสาร → พิมพ์ 'สรุปใบเสร็จ'",
+                )
+            Path(img_path).unlink(missing_ok=True)
+            return
         else:
+            start_pdf_flow(session_key, mode="pdf")
+            for img_path in permanent_paths:
+                add_image(session_key, img_path)
             reply_text(
-                reply_token,
-                f"📥 รับสลิปที่ {n} แล้วครับ (อ่านยอดไม่ได้)\n"
-                f"💰 ยอดสะสมที่อ่านได้: {total:,.2f} บาท\n\n"
-                f"ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว'",
+                latest_reply_token,
+                f"📥 ได้รับรูปภาพทั้งหมด {len(permanent_paths)} รูปแล้วครับ และเตรียมพร้อมสำหรับการสร้าง PDF\n"
+                "ส่งรูปเพิ่มเติมได้ หรือพิมพ์ 'เสร็จแล้ว' เพื่อตั้งชื่อไฟล์และดาวน์โหลด PDF ครับ"
             )
-        return
-
-    reply_text(reply_token, image_received_msg(mode, count))
+            return
+            
+    else:
+        # Inside flow
+        if mode == "compress":
+            try:
+                from PIL import Image as PILImage
+                from PIL import ImageOps as PILOps
+                import io
+                
+                compressed_urls = []
+                for img_path in permanent_paths:
+                    img = PILImage.open(img_path)
+                    img = PILOps.exif_transpose(img)
+                    img.thumbnail((1280, 1280))
+                    
+                    filename = f"compressed-{uuid.uuid4().hex}.jpg"
+                    out_path = GENERATED_DIR / filename
+                    img.save(out_path, "JPEG", optimize=True, quality=85)
+                    
+                    file_url = build_file_url(request_base_url, filename)
+                    compressed_urls.append(file_url)
+                    
+                messages = []
+                for url in compressed_urls[:4]:
+                    messages.append({
+                        "type": "image",
+                        "originalContentUrl": url,
+                        "previewImageUrl": url
+                    })
+                    
+                links_text = "\n".join(f"🔗 {url}" for url in compressed_urls)
+                txt_msg = f"✅ ย่อขนาดรูปภาพเรียบร้อยแล้วครับ! ({len(compressed_urls)} รูป)\n\n{links_text}\n\nส่งรูปเพิ่มเติมเพื่อย่อต่อได้เลย หรือพิมพ์ 'เสร็จแล้ว' เพื่อเสร็จสิ้นครับ"
+                messages.append({
+                    "type": "text",
+                    "text": txt_msg[:5000]
+                })
+                
+                requests.post(
+                    LINE_REPLY_ENDPOINT,
+                    headers={
+                        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "replyToken": latest_reply_token,
+                        "messages": messages,
+                    },
+                    timeout=30,
+                ).raise_for_status()
+            except Exception as e:
+                reply_text(latest_reply_token, f"เกิดข้อผิดพลาดในการย่อรูปครับ: {e}")
+            finally:
+                cleanup_images(permanent_paths)
+            return
+            
+        if mode == "resize":
+            for img_path in permanent_paths:
+                try:
+                    from PIL import Image as PILImage
+                    from PIL import ImageOps as PILOps
+                    
+                    img = PILImage.open(img_path)
+                    img = PILOps.exif_transpose(img)
+                    img.thumbnail((1240, 1754))
+                    img.save(img_path, optimize=True, quality=85)
+                except Exception:
+                    pass
+                    
+        if mode != "multi_slip":
+            for img_path in permanent_paths:
+                updated_session = add_image(session_key, img_path)
+            count = len(updated_session.get("images", []))
+            reply_text(
+                latest_reply_token,
+                f"📥 ได้รับรูปภาพเพิ่ม {len(permanent_paths)} รูปแล้วครับ (รวมทั้งหมด {count} รูป)\n"
+                f"{image_received_msg_suffix(mode)}"
+            )
+            return
+            
+        if mode == "multi_slip":
+            new_slips = []
+            for img_path in permanent_paths:
+                add_image(session_key, img_path)
+                try:
+                    slip = read_slip(img_path)
+                    amount = slip.get("amount") or 0.0
+                except Exception:
+                    slip = {"amount": 0.0, "bank": "", "ref": "", "datetime": ""}
+                    amount = 0.0
+                    
+                updated_session = add_slip_entry(
+                    session_key,
+                    {
+                        "amount": amount,
+                        "bank": slip.get("bank", ""),
+                        "ref": slip.get("ref", ""),
+                        "date": slip.get("datetime", ""),
+                        "img_path": img_path,
+                    }
+                )
+                new_slips.append((amount, slip.get("bank", "")))
+                
+            slip_amounts = updated_session.get("slip_amounts", [])
+            total = sum(a for a in slip_amounts if a)
+            n = len(slip_amounts)
+            
+            lines = [f"📥 ได้รับสลิปเพิ่ม {len(permanent_paths)} ใบ (รวมทั้งหมด {n} ใบ)"]
+            for idx, (amt, bank) in enumerate(new_slips, 1):
+                bank_str = f" ({bank})" if bank else ""
+                lines.append(f"• ใบที่ {n - len(permanent_paths) + idx}: {amt:,.2f} บาท{bank_str}")
+            lines.append(f"\n💰 ยอดสะสม: {total:,.2f} บาท")
+            lines.append("\nส่งสลิปเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูสรุป")
+            
+            reply_text(latest_reply_token, "\n".join(lines))
+            return
 
 
 # ── Slip / Receipt processors ─────────────────────────────────────────────────
@@ -3274,7 +3383,9 @@ def build_file_url(request, filename):
     encoded = urllib.parse.quote(filename)
     if PUBLIC_BASE_URL:
         return f"{PUBLIC_BASE_URL}/files/{encoded}"
-    return str(request.base_url).rstrip("/") + f"/files/{encoded}"
+    if isinstance(request, str):
+        return request.rstrip("/") + f"/files/{encoded}"
+    return str(getattr(request, "base_url", request)).rstrip("/") + f"/files/{encoded}"
 
 
 def get_session_key(source):
