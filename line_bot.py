@@ -16,7 +16,7 @@ from typing import Any
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 
 from core.brain import ask_ai, clear_chat_history
@@ -266,6 +266,181 @@ class ImageDebouncer:
 image_debouncer = ImageDebouncer()
 
 
+def reply_image_received_with_quick_replies(reply_token, mode, count, total_count=None):
+    if total_count is None:
+        total_count = count
+        
+    suffix = {
+        "ocr_summary_pdf": "ส่งเพิ่มได้อีก หรือกดปุ่มด้านล่างให้ผมวิเคราะห์ + สรุป + สร้าง PDF ครับ",
+        "doc_summary": "ส่งเพิ่มได้อีก หรือกดเลือกโหมดสรุปที่ต้องการด้านล่างได้เลยครับ",
+        "slip": "ส่งเพิ่มได้อีก หรือกดปุ่มด้านล่างให้ผมอ่านและบันทึกยอดครับ",
+        "pdf": "ส่งเพิ่มได้อีก หรือกดปุ่มด้านล่างเพื่อรวบรวมเป็นไฟล์ PDF ครับ",
+        "resize": "ส่งเพิ่มได้อีก หรือกดปุ่มด้านล่างเพื่อนำมาจัดหน้า A4 PDF ครับ",
+        "compress": "ส่งเพิ่มได้อีก หรือกดปุ่มด้านล่างเมื่อย่อรูปครบตามที่ต้องการแล้วครับ",
+    }.get(mode, "ส่งเพิ่มได้อีก หรือกดปุ่มด้านล่างเพื่อดำเนินการต่อครับ")
+    
+    text = f"📥 ได้รับรูปภาพเพิ่ม {count} รูปแล้วครับ (รวมทั้งหมด {total_count} รูป)\n{suffix}"
+    
+    if mode == "doc_summary":
+        items = [
+            {"label": "📝 สรุปแบบสั้น", "text": "สรุปแบบสั้น"},
+            {"label": "📖 สรุปแบบละเอียด", "text": "สรุปแบบละเอียด"},
+            {"label": "🎓 สรุปเพื่อสอบ", "text": "สรุปเพื่อสอบ"},
+            {"label": "📋 สรุปเป็นข้อ", "text": "สรุปเป็นข้อ"},
+            {"label": "🧠 สรุปเป็น mind map", "text": "สรุปเป็น mind map"},
+            {"label": "❌ ยกเลิก", "text": "ยกเลิก"}
+        ]
+    else:
+        items = [
+            {"label": "✅ เสร็จแล้ว", "text": "เสร็จแล้ว"},
+            {"label": "❌ ยกเลิก", "text": "ยกเลิก"}
+        ]
+        
+    reply_text_with_quick_replies(reply_token, text, items)
+
+
+def reply_slip_selection_flex(reply_token: str, total: float, slip_data: list[dict], session_key: str) -> None:
+    item_contents = []
+    for idx, d in enumerate(slip_data, 1):
+        bank = d.get("bank") or "สลิปโอนเงิน"
+        amt = d.get("amount") or 0.0
+        if amt > 0:
+            amt_text = f"{amt:,.2f} บาท"
+            amt_color = "#333333"
+        else:
+            amt_text = "อ่านยอดไม่ได้"
+            amt_color = "#E74C3C"
+            
+        item_contents.append({
+            "type": "box",
+            "layout": "horizontal",
+            "margin": "xs",
+            "contents": [
+                {"type": "text", "text": f"{idx}. {bank}", "size": "xs", "color": "#555555", "flex": 6},
+                {"type": "text", "text": amt_text, "size": "xs", "color": amt_color, "weight": "bold", "align": "end", "flex": 4}
+            ]
+        })
+
+    contents = {
+      "type": "bubble",
+      "size": "mega",
+      "header": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#1E3A8A",
+        "paddingAll": "16px",
+        "contents": [
+          {
+            "type": "text",
+            "text": "📊 สรุปยอดสลิปทั้งหมด",
+            "color": "#FFFFFF",
+            "weight": "bold",
+            "size": "lg"
+          },
+          {
+            "type": "text",
+            "text": f"ตรวจสอบและยืนยันข้อมูล ({len(slip_data)} ใบ)",
+            "color": "#93C5FD",
+            "size": "xs",
+            "margin": "xs"
+          }
+        ]
+      },
+      "body": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#F8F9FA",
+        "paddingAll": "16px",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+              {
+                "type": "text",
+                "text": "ยอดเงินรวมสะสม",
+                "size": "xs",
+                "color": "#777777"
+              },
+              {
+                "type": "text",
+                "text": f"{total:,.2f} บาท",
+                "size": "xl",
+                "weight": "bold",
+                "color": "#111111",
+                "margin": "xs"
+              }
+            ]
+          },
+          {
+            "type": "separator",
+            "color": "#EAEAEA",
+            "margin": "md"
+          },
+          {
+            "type": "text",
+            "text": "📋 รายละเอียดแต่ละใบ",
+            "weight": "bold",
+            "size": "xs",
+            "color": "#777777",
+            "margin": "md"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "margin": "sm",
+            "spacing": "xs",
+            "contents": item_contents[:20]
+          },
+          {
+            "type": "separator",
+            "color": "#EAEAEA",
+            "margin": "md"
+          },
+          {
+            "type": "text",
+            "text": "❓ บันทึกสลิปชุดนี้เป็น รายจ่าย หรือ รายรับ ดีครับ?",
+            "size": "xs",
+            "color": "#555555",
+            "align": "center",
+            "margin": "md",
+            "wrap": True
+          }
+        ]
+      }
+    }
+    
+    alt_text = f"📊 สรุปสลิป {len(slip_data)} ใบ ยอดรวม {total:,.2f} บาท"
+    
+    actions = [
+        {"type": "action", "action": {"type": "message", "label": "🔴 บันทึกเป็นรายจ่าย", "text": "บันทึกสลิปเป็นรายจ่าย"}},
+        {"type": "action", "action": {"type": "message", "label": "🟢 บันทึกเป็นรายรับ", "text": "บันทึกสลิปเป็นรายรับ"}},
+        {"type": "action", "action": {"type": "message", "label": "❌ ยกเลิก", "text": "ยกเลิก"}}
+    ]
+    
+    requests.post(
+        LINE_REPLY_ENDPOINT,
+        headers={
+            "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "replyToken": reply_token,
+            "messages": [
+                {
+                    "type": "flex",
+                    "altText": alt_text,
+                    "contents": contents,
+                    "quickReply": {
+                        "items": actions
+                    }
+                }
+            ],
+        },
+        timeout=30,
+    ).raise_for_status()
+
+
 @app.get("/")
 def health_check() -> dict[str, str | int]:
     from core.db_service import DB_PATH
@@ -282,7 +457,9 @@ def health_check() -> dict[str, str | int]:
 
 @app.post("/webhook/line")
 async def line_webhook(
-    request: Request, x_line_signature: str = Header(default="")
+    request: Request,
+    background_tasks: BackgroundTasks,
+    x_line_signature: str = Header(default="")
 ) -> dict[str, str]:
     if not LINE_CHANNEL_SECRET or not LINE_CHANNEL_ACCESS_TOKEN:
         raise HTTPException(status_code=500, detail="LINE env not configured.")
@@ -291,7 +468,7 @@ async def line_webhook(
         raise HTTPException(status_code=401, detail="Invalid signature.")
     payload = await request.json()
     for event in payload.get("events", []):
-        handle_event(event, request)
+        background_tasks.add_task(handle_event, event, request)
     return {"status": "ok"}
 
 
@@ -977,10 +1154,11 @@ def process_image_batch(session_key, batch_images):
             start_pdf_flow(session_key, mode="pdf")
             for img_path in permanent_paths:
                 add_image(session_key, img_path)
-            reply_text(
-                latest_reply_token,
-                f"📥 ได้รับรูปภาพทั้งหมด {len(permanent_paths)} รูปแล้วครับ และเตรียมพร้อมสำหรับการสร้าง PDF\n"
-                "ส่งรูปเพิ่มเติมได้ หรือพิมพ์ 'เสร็จแล้ว' เพื่อตั้งชื่อไฟล์และดาวน์โหลด PDF ครับ"
+            reply_image_received_with_quick_replies(
+                reply_token=latest_reply_token,
+                mode="pdf",
+                count=len(permanent_paths),
+                total_count=len(permanent_paths)
             )
             return
             
@@ -1014,10 +1192,16 @@ def process_image_batch(session_key, batch_images):
                     })
                     
                 links_text = "\n".join(f"🔗 {url}" for url in compressed_urls)
-                txt_msg = f"✅ ย่อขนาดรูปภาพเรียบร้อยแล้วครับ! ({len(compressed_urls)} รูป)\n\n{links_text}\n\nส่งรูปเพิ่มเติมเพื่อย่อต่อได้เลย หรือพิมพ์ 'เสร็จแล้ว' เพื่อเสร็จสิ้นครับ"
+                txt_msg = f"✅ ย่อขนาดรูปภาพเรียบร้อยแล้วครับ! ({len(compressed_urls)} รูป)\n\n{links_text}\n\nส่งรูปเพิ่มเติมเพื่อย่อต่อได้เลย หรือกดปุ่ม 'เสร็จแล้ว' เพื่อเสร็จสิ้นครับ"
                 messages.append({
                     "type": "text",
-                    "text": txt_msg[:5000]
+                    "text": txt_msg[:5000],
+                    "quickReply": {
+                        "items": [
+                            {"type": "action", "action": {"type": "message", "label": "✅ เสร็จแล้ว", "text": "เสร็จแล้ว"}},
+                            {"type": "action", "action": {"type": "message", "label": "❌ ยกเลิก", "text": "ยกเลิก"}}
+                        ]
+                    }
                 })
                 
                 requests.post(
@@ -1055,10 +1239,11 @@ def process_image_batch(session_key, batch_images):
             for img_path in permanent_paths:
                 updated_session = add_image(session_key, img_path)
             count = len(updated_session.get("images", []))
-            reply_text(
-                latest_reply_token,
-                f"📥 ได้รับรูปภาพเพิ่ม {len(permanent_paths)} รูปแล้วครับ (รวมทั้งหมด {count} รูป)\n"
-                f"{image_received_msg_suffix(mode)}"
+            reply_image_received_with_quick_replies(
+                reply_token=latest_reply_token,
+                mode=mode,
+                count=len(permanent_paths),
+                total_count=count
             )
             return
             
@@ -1094,15 +1279,22 @@ def process_image_batch(session_key, batch_images):
                 bank_str = f" ({bank})" if bank else ""
                 lines.append(f"• ใบที่ {n - len(permanent_paths) + idx}: {amt:,.2f} บาท{bank_str}")
             lines.append(f"\n💰 ยอดสะสม: {total:,.2f} บาท")
-            lines.append("\nส่งสลิปเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูสรุป")
+            lines.append("\nส่งสลิปเพิ่มได้อีก หรือกดปุ่ม 'เสร็จแล้ว' ด้านล่าง")
             
-            reply_text(latest_reply_token, "\n".join(lines))
+            reply_text_with_quick_replies(
+                latest_reply_token,
+                "\n".join(lines),
+                [
+                    {"label": "✅ เสร็จแล้ว", "text": "เสร็จแล้ว"},
+                    {"label": "❌ ยกเลิก", "text": "ยกเลิก"}
+                ]
+            )
             return
 
 
 # ── Slip / Receipt processors ─────────────────────────────────────────────────
 def _prompt_slip_type_selection(reply_token: str, session_key: str) -> None:
-    """แสดงสรุปยอดรวมของสลิปในแชท พร้อมส่งปุ่ม Quick Reply ให้เลือกประเภท"""
+    """แสดงสรุปยอดรวมของสลิปในแชท ด้วย Flex Message ดีไซน์พรีเมียม พร้อมส่ง Quick Reply"""
     session = get_session(session_key)
     images = session.get("images", [])
     slip_data = session.get("slip_data", [])
@@ -1117,28 +1309,31 @@ def _prompt_slip_type_selection(reply_token: str, session_key: str) -> None:
             except Exception:
                 slip_data.append({"amount": 0.0, "bank": "", "ref": "", "date": ""})
     total = sum(d.get("amount", 0) or 0 for d in slip_data)
-    valid_count = sum(1 for d in slip_data if d.get("amount"))
-
-    lines = [
-        f"📊 สรุปยอดสลิปทั้งหมด ({len(slip_data)} ใบ)",
-        "─" * 28,
-        f"💰 ยอดรวมสะสม: {total:,.2f} บาท",
-        f"✅ อ่านสำเร็จ: {valid_count} ใบ",
-        "─" * 28,
-        "❓ ต้องการบันทึกสลิปชุดนี้เป็น รายจ่าย หรือ รายรับ ดีครับ? (กรุณากดเลือกปุ่มด้านล่าง)"
-    ]
 
     set_waiting_for_slip_type(session_key, slip_data)
-
-    reply_text_with_quick_replies(
-        reply_token,
-        "\n".join(lines),
-        [
-            {"label": "🔴 บันทึกเป็นรายจ่าย", "text": "บันทึกสลิปเป็นรายจ่าย"},
-            {"label": "🟢 บันทึกเป็นรายรับ", "text": "บันทึกสลิปเป็นรายรับ"},
-            {"label": "❌ ยกเลิก", "text": "ยกเลิก"}
+    
+    try:
+        reply_slip_selection_flex(reply_token, total, slip_data, session_key)
+    except Exception as e:
+        print(f"[LINE] Flex selection error: {e}, falling back to text.")
+        valid_count = sum(1 for d in slip_data if d.get("amount"))
+        lines = [
+            f"📊 สรุปยอดสลิปทั้งหมด ({len(slip_data)} ใบ)",
+            "─" * 28,
+            f"💰 ยอดรวมสะสม: {total:,.2f} บาท",
+            f"✅ อ่านสำเร็จ: {valid_count} ใบ",
+            "─" * 28,
+            "❓ ต้องการบันทึกสลิปชุดนี้เป็น รายจ่าย หรือ รายรับ ดีครับ? (กรุณากดเลือกปุ่มด้านล่าง)"
         ]
-    )
+        reply_text_with_quick_replies(
+            reply_token,
+            "\n".join(lines),
+            [
+                {"label": "🔴 บันทึกเป็นรายจ่าย", "text": "บันทึกสลิปเป็นรายจ่าย"},
+                {"label": "🟢 บันทึกเป็นรายรับ", "text": "บันทึกสลิปเป็นรายรับ"},
+                {"label": "❌ ยกเลิก", "text": "ยกเลิก"}
+            ]
+        )
 
 
 def _process_and_summarize_slips(
