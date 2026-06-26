@@ -635,12 +635,13 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
     if m_name:
         new_name = m_name.group(1).strip()
         save_profile(line_user_id, {"name": new_name})
-        reply_text(reply_token, f"✅ เปลี่ยนชื่อเป็น '{new_name}' เรียบร้อยแล้วครับ")
+        reply_text(reply_token, f"✅ เปลี่ยนชื่อเป็นคุณ {new_name} เรียบร้อยแล้วครับ")
         return
 
     m_age = re.match(r"^เปลี่ยนอายุเป็น\s*(.+)", raw_text)
     if m_age:
         new_age = m_age.group(1).strip()
+        new_age = re.sub(r"\s*ปี\s*$", "", new_age).strip()
         save_profile(line_user_id, {"age": new_age})
         reply_text(reply_token, f"✅ เปลี่ยนอายุเป็น {new_age} ปี เรียบร้อยแล้วครับ")
         return
@@ -649,7 +650,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
     if m_job:
         new_job = m_job.group(1).strip()
         save_profile(line_user_id, {"job": new_job})
-        reply_text(reply_token, f"✅ เปลี่ยนอาชีพเป็น '{new_job}' เรียบร้อยแล้วครับ")
+        reply_text(reply_token, f"✅ เปลี่ยนอาชีพเป็น {new_job} เรียบร้อยแล้วครับ")
         return
 
     # ── Knowledge Base ──
@@ -685,7 +686,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         return
 
     # ── PDF flows ──
-    if normalized in PDF_COMMANDS:
+    if _is_pdf_cmd(normalized):
         reply_pdf_creator_link(reply_token)
         return
     if normalized in RECEIPT_COMMANDS:
@@ -976,28 +977,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
             )
         return
 
-    # ── เปลี่ยนชื่อ/อายุ/อาชีพ เป็น ... ──
-    m = re.match(r"^เปลี่ยนชื่อเป็น\s*(.+)$", normalized)
-    if m:
-        new_name = m.group(1).strip()
-        save_profile(line_user_id, {"name": new_name})
-        reply_text(reply_token, f"✅ เปลี่ยนชื่อเป็นคุณ {new_name} เรียบร้อยแล้วครับ")
-        return
 
-    m = re.match(r"^เปลี่ยนอายุเป็น\s*(.+)$", normalized)
-    if m:
-        new_age = m.group(1).strip()
-        new_age = re.sub(r"\s*ปี\s*$", "", new_age).strip()
-        save_profile(line_user_id, {"age": new_age})
-        reply_text(reply_token, f"✅ เปลี่ยนอายุเป็น {new_age} ปี เรียบร้อยแล้วครับ")
-        return
-
-    m = re.match(r"^เปลี่ยนอาชีพเป็น\s*(.+)$", normalized)
-    if m:
-        new_job = m.group(1).strip()
-        save_profile(line_user_id, {"job": new_job})
-        reply_text(reply_token, f"✅ เปลี่ยนอาชีพเป็น {new_job} เรียบร้อยแล้วครับ")
-        return
 
     # ── Auto extract profile ──
     saved = extract_and_save_profile(line_user_id, raw_text)
@@ -1170,15 +1150,8 @@ def process_image_batch(session_key, batch_images):
             Path(img_path).unlink(missing_ok=True)
             return
         else:
-            start_pdf_flow(session_key, mode="pdf")
-            for img_path in permanent_paths:
-                add_image(session_key, img_path)
-            reply_image_received_with_quick_replies(
-                reply_token=latest_reply_token,
-                mode="pdf",
-                count=len(permanent_paths),
-                total_count=len(permanent_paths)
-            )
+            cleanup_images(permanent_paths)
+            reply_pdf_creator_link(latest_reply_token)
             return
             
     else:
@@ -1580,6 +1553,26 @@ def _reply_profile(reply_token: str, user_id: str) -> None:
             lines.append(f"• {k}: {v}")
     lines.append(f"\n🌐 หรือกดที่นี่เพื่อแก้ไขโปรไฟล์: {LIFF_PROFILE_URL}")
     reply_text(reply_token, "\n".join(lines))
+
+
+def _is_pdf_cmd(text: str) -> bool:
+    """จับคำสั่งถามเกี่ยวกับ PDF หรือ ลิงก์ทำ PDF"""
+    if text in PDF_COMMANDS:
+        return True
+    patterns = [
+        r"ทำ.*pdf",
+        r"รวม.*pdf",
+        r"แปลง.*pdf",
+        r"สร้าง.*pdf",
+        r"ขอ.*pdf",
+        r"ลิงก์.*pdf",
+        r"ลิ้ง.*pdf",
+        r"เว็บ.*pdf",
+        r"web.*pdf",
+        r"pdf.*อย่างไร",
+        r"pdf.*ยังไง",
+    ]
+    return any(re.search(p, text) for p in patterns)
 
 
 def _is_multi_slip_cmd(text: str) -> bool:
