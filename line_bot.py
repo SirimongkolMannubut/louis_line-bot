@@ -82,11 +82,10 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "storage" / "uploads"
 GENERATED_DIR = BASE_DIR / "storage" / "generated"
-NOTES_FILE = BASE_DIR / "memory" / "notes.json"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-NOTES_FILE.parent.mkdir(parents=True, exist_ok=True)
+(BASE_DIR / "memory").mkdir(parents=True, exist_ok=True)
 
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
@@ -162,9 +161,6 @@ MULTI_SLIP_COMMANDS = {
     "สรุปเงินโอน",
 }
 TRANSLATE_COMMANDS = {"แปลภาษา", "แปล", "translate"}
-NOTE_COMMANDS = {"จดบันทึก", "บันทึก", "note"}
-NOTE_LIST_COMMANDS = {"ดูบันทึก", "รายการบันทึก"}
-NOTE_CLEAR_COMMANDS = {"ลบบันทึก", "ล้างบันทึก"}
 INCOME_COMMANDS = {"รายรับ", "รับเงิน", "income", "บันทึกรายรับ"}
 EXPENSE_COMMANDS = {"รายจ่าย", "จ่ายเงิน", "expense", "ค่าใช้จ่าย", "บันทึกรายจ่าย"}
 SUMMARY_COMMANDS = {
@@ -275,7 +271,6 @@ def reply_image_received_with_quick_replies(reply_token, mode, count, total_coun
         "doc_summary": "ส่งเพิ่มได้อีก หรือกดเลือกโหมดสรุปที่ต้องการด้านล่างได้เลยครับ",
         "slip": "ส่งเพิ่มได้อีก หรือกดปุ่มด้านล่างให้ผมอ่านและบันทึกยอดครับ",
         "pdf": "ส่งเพิ่มได้อีก หรือกดปุ่มด้านล่างเพื่อรวบรวมเป็นไฟล์ PDF ครับ",
-        "resize": "ส่งเพิ่มได้อีก หรือกดปุ่มด้านล่างเพื่อนำมาจัดหน้า A4 PDF ครับ",
         "compress": "ส่งเพิ่มได้อีก หรือกดปุ่มด้านล่างเมื่อย่อรูปครบตามที่ต้องการแล้วครับ",
     }.get(mode, "ส่งเพิ่มได้อีก หรือกดปุ่มด้านล่างเพื่อดำเนินการต่อครับ")
     
@@ -565,7 +560,7 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         try:
             build_pdf_from_images(images, str(output_path))
             file_url = build_file_url(request, pdf_filename)
-            title = "จัดหน้ากระดาษ A4" if mode == "resize" else "รวมรูปภาพเป็น PDF"
+            title = "รวมรูปภาพเป็น PDF"
             reply_pdf_success(reply_token, title, safe_name, f"{len(images)} รูป", file_url)
             clear_session(session_key)
             cleanup_images(images)
@@ -728,31 +723,6 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         return
     if re.match(r"^แปลเป็น|^translate to", normalized):
         reply_text(reply_token, ask_ai(f"แปลข้อความนี้ ตอบแค่คำแปลเท่านั้น:\n{raw_text}"))
-        return
-
-    # ── Notes ── (รองรับทั้งแบบ บันทึก: ข้อความ และ บันทึก ข้อความ)
-    if re.match(r"^(บันทึก|จดบันทึก|note)\s*[:：]?\s+\S", normalized):
-        sep = ":" if ":" in raw_text else " "
-        content = raw_text.split(sep, 1)[-1].strip()
-        if content:
-            save_note(session_key, content)
-            reply_text(reply_token, f"📝 บันทึกแล้วครับ\n{content}")
-        return
-    if normalized in NOTE_COMMANDS:
-        reply_text(
-            reply_token,
-            "📝 บันทึกข้อความ\n\nพิมพ์ได้เลยครับ เช่น\n"
-            "• บันทึก ประชุมพรุ่งนี้ 10 โมง\n"
-            "• บันทึก ซื้อของที่ต้องการ\n"
-            "• บันทึก: ไอเดียโปรเจกต์",
-        )
-        return
-    if normalized in NOTE_LIST_COMMANDS:
-        reply_text(reply_token, get_notes(session_key))
-        return
-    if normalized in NOTE_CLEAR_COMMANDS:
-        clear_notes(session_key)
-        reply_text(reply_token, "ลบบันทึกทั้งหมดแล้วครับ 🗑")
         return
 
     if normalized in {"ล้างแชท", "ลบประวัติแชท", "clear chat"}:
@@ -1033,7 +1003,6 @@ def image_received_msg_suffix(mode):
         "doc_summary": "ส่งเพิ่มได้อีก หรือพิมพ์เลือกโหมดสรุป (เช่น 'สรุปแบบสั้น' / 'เสร็จแล้ว') ได้เลยครับ",
         "slip": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' ให้ผมอ่านและบันทึกยอดครับ",
         "pdf": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อรวบรวมเป็นไฟล์ PDF ครับ",
-        "resize": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อนำมาจัดหน้า A4 PDF ครับ",
         "compress": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เมื่อย่อรูปครบตามที่ต้องการแล้วครับ",
     }.get(mode, "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF ครับ")
 
@@ -1213,20 +1182,6 @@ def process_image_batch(session_key, batch_images):
             finally:
                 cleanup_images(permanent_paths)
             return
-            
-        if mode == "resize":
-            for img_path in permanent_paths:
-                try:
-                    from PIL import Image as PILImage
-                    from PIL import ImageOps as PILOps
-                    
-                    img = PILImage.open(img_path)
-                    img = PILOps.exif_transpose(img)
-                    img.thumbnail((1240, 1754))
-                    img.save(img_path, optimize=True, quality=85)
-                except Exception:
-                    pass
-                    
         if mode != "multi_slip":
             for img_path in permanent_paths:
                 updated_session = add_image(session_key, img_path)
@@ -1556,7 +1511,7 @@ def _reply_profile(reply_token: str, user_id: str) -> None:
 
 
 def _is_pdf_cmd(text: str) -> bool:
-    """จับคำสั่งถามเกี่ยวกับ PDF หรือ ลิงก์ทำ PDF"""
+    """จับคำสั่งถามเกี่ยวกับ PDF หรือ ลิงก์ทำ PDF หรือจัดรูป A4"""
     if text in PDF_COMMANDS:
         return True
     patterns = [
@@ -1571,6 +1526,13 @@ def _is_pdf_cmd(text: str) -> bool:
         r"web.*pdf",
         r"pdf.*อย่างไร",
         r"pdf.*ยังไง",
+        r"จัด.*a4",
+        r"a4.*pdf",
+        r"จัดหน้า.*pdf",
+        r"จัดรูป.*pdf",
+        r"จัดรูปลง.*a4",
+        r"ปรับ.*a4",
+        r"ปรับสัดส่วนรูป",
     ]
     return any(re.search(p, text) for p in patterns)
 
@@ -1838,12 +1800,6 @@ def start_flow_msg(mode):
             "ผมจะรวบรวมและสร้างเป็นไฟล์ PDF ไฟล์เดียวให้ครับ\n\n"
             "เมื่อส่งครบพิมพ์ 'เสร็จแล้ว' เพื่อตั้งชื่อไฟล์และดาวน์โหลด"
         ),
-        "resize": (
-            "📄 จัดรูปลง A4 (สร้าง PDF)\n\n"
-            "เหมาะสำหรับ: จัดรูปถ่ายเอกสารให้อยู่ในสัดส่วน A4 ของไฟล์ PDF (เช่น ยื่นเอกสารฝึกงาน หรือ กยศ.)\n\n"
-            "ส่งรูปมาได้เลยครับ ส่งได้หลายรูป\n"
-            "เมื่อครบพิมพ์ 'เสร็จแล้ว' แล้วตั้งชื่อไฟล์ PDF"
-        ),
         "compress": (
             "🖼️ ย่อขนาดไฟล์รูป (Compress Image)\n\n"
             "เหมาะสำหรับ: ลดขนาดไฟล์รูป (ลด KB/MB) หรือปรับความกว้างสูงไม่เกิน 1280px\n"
@@ -1862,7 +1818,6 @@ def waiting_msg(mode):
         "slip": "📎 ส่งสลิปเพิ่มได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' ให้ผมรวมยอด",
         "multi_slip": "📎 ส่งสลิปเพิ่มได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' เพื่อดูยอดรวม",
         "pdf": "📎 ส่งรูปที่ต้องการรวมเป็น PDF เพิ่มได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' เพื่อสร้างไฟล์",
-        "resize": "📎 ส่งรูปเพิ่มได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' เพื่อแปลงลง A4 PDF",
         "compress": "📎 ส่งรูปเพิ่มเพื่อย่อขนาดไฟล์ต่อได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' เพื่อเสร็จสิ้น",
     }
     return msgs.get(mode, "📎 ส่งรูปเพิ่มได้เลยครับ หรือพิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF")
@@ -1874,7 +1829,6 @@ def image_received_msg(mode, count):
         "doc_summary": "ส่งเพิ่มได้อีก หรือพิมพ์เลือกโหมดสรุป (เช่น 'สรุปแบบสั้น' / 'เสร็จแล้ว') ได้เลยครับ",
         "slip": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' ให้ผมอ่านและบันทึกยอดครับ",
         "pdf": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อรวบรวมเป็นไฟล์ PDF ครับ",
-        "resize": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เพื่อนำมาจัดหน้า A4 PDF ครับ",
         "compress": "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' เมื่อย่อรูปครบตามที่ต้องการแล้วครับ",
     }.get(mode, "ส่งเพิ่มได้อีก หรือพิมพ์ 'เสร็จแล้ว' ให้ผมสร้าง PDF ครับ")
     return f"📥 รับรูปแล้ว {count} รูปครับ\n{suffix}"
@@ -1921,14 +1875,6 @@ def build_success_message(mode, safe_name, file_url, images, user_id):
         sep = "─" * 25
         return f"🧠 วิเคราะห์เอกสารแล้วครับ\n{sep}\n{summary}\n\n{base}"
 
-    if mode == "resize":
-        return (
-            f"✅ จัดรูปลงหน้า A4 (PDF) เรียบร้อยครับ\n"
-            f"📄 {len(images)} รูป → ขนาด A4\n"
-            f"ชื่อ: {safe_name}.pdf\n"
-            f"🔗 {file_url}"
-        )
-
     if mode == "pdf":
         return (
             f"✅ รวมรูปภาพเป็นไฟล์ PDF เรียบร้อยครับ\n"
@@ -1943,46 +1889,6 @@ def build_success_message(mode, safe_name, file_url, images, user_id):
     return base
 
 
-# ── Notes ─────────────────────────────────────────────────────────────────────
-def _load_notes():
-    if not NOTES_FILE.exists():
-        return {}
-    try:
-        return json.loads(NOTES_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-
-def _save_notes(data):
-    NOTES_FILE.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-
-
-def save_note(session_key, content):
-    data = _load_notes()
-    data.setdefault(session_key, []).append(
-        {"content": content, "time": get_thailand_now().strftime("%d/%m/%Y %H:%M")}
-    )
-    _save_notes(data)
-
-
-def get_notes(session_key):
-    notes = _load_notes().get(session_key, [])
-    if not notes:
-        return "ยังไม่มีบันทึกครับ พิมพ์ 'บันทึก ข้อความ' เพื่อบันทึกได้เลยครับ"
-    lines = [f"📝 บันทึก {len(notes)} รายการ\n"]
-    for i, n in enumerate(notes[-20:], 1):
-        lines.append(f"{i}. {n['content']}\n   🕐 {n['time']}")
-    return "\n".join(lines)
-
-
-def clear_notes(session_key):
-    data = _load_notes()
-    data.pop(session_key, None)
-    _save_notes(data)
-
-
 # ── Messages ──────────────────────────────────────────────────────────────────
 def build_welcome_message():
     return (
@@ -1990,8 +1896,7 @@ def build_welcome_message():
         "ผมช่วยได้หลายอย่างครับ เช่น\n"
         "🧾 ส่งสลิปมาตรง ๆ → ผมอ่านยอดและรวมให้เลย\n"
         "📄 'ทำ PDF' → ทำไฟล์ PDF ผ่านเว็บ\n"
-        "💰 'ค่าน้ำ 270' → บันทึกรายจ่าย\n"
-        "📝 'บันทึก ข้อความ' → จดบันทึก\n\n"
+        "💰 'ค่าน้ำ 270' → บันทึกรายจ่าย\n\n"
         "พิมพ์ 'เมนู' เพื่อดูทุกฟีเจอร์ หรือถามได้เลยครับ 💬"
     )
 
@@ -2612,11 +2517,7 @@ def build_submenu_message(category: str) -> str:
             "─────────────────\n"
             "📌 เพิ่มนัด\n"
             "• นัด ประชุม 2026-07-20 09:00\n\n"
-            "📅 ดูนัดหมาย\n\n"
-            "📝 บันทึก\n"
-            "• บันทึก [ข้อความ]\n"
-            "• ดูบันทึก\n"
-            "• ลบบันทึก\n"
+            "📅 ดูนัดหมาย\n"
             "─────────────────\n"
             "👉 พิมพ์ เมนู เพื่อกลับ"
         )
@@ -3191,18 +3092,6 @@ def reply_flow_start_flex(reply_token, mode):
             footer_text="📎 ส่งรูปภาพมาได้เลยครับ",
             quick_replies=cancel_qr
         )
-    elif mode == "resize":
-        reply_premium_info_flex(
-            reply_token,
-            title="📄 จัดรูปลง A4 (สร้าง PDF)",
-            subtitle="ปรับขนาดสัดส่วนรูปถ่ายให้ลงล็อกกระดาษ A4",
-            bullet_points=[
-                "เหมาะสำหรับรูปถ่ายเอกสารสำคัญ (สมัครเรียน, กยศ.)",
-                "จัดวางหน้ากระดาษ A4 สวยงามเป็นสัดส่วน"
-            ],
-            footer_text="📎 ส่งรูปภาพมาได้เลยครับ",
-            quick_replies=cancel_qr
-        )
     elif mode == "compress":
         reply_premium_info_flex(
             reply_token,
@@ -3257,8 +3146,7 @@ def reply_submenu(reply_token, category: str) -> bool:
         title = "📅 เมนูนัดหมาย"
         buttons = [
             {"label": "🌐 ปฏิทินนัดหมายบนเว็บ", "uri": LIFF_CALENDAR_URL},
-            {"label": "📅 ตารางนัดหมายทั้งหมด", "text": "ดูนัดหมาย"},
-            {"label": "📝 ดูบันทึกย่อทั้งหมด", "text": "ดูบันทึก"}
+            {"label": "📅 ตารางนัดหมายทั้งหมด", "text": "ดูนัดหมาย"}
         ]
     elif cat in {"โปรไฟล์", "profile"}:
         title = "👤 เมนูโปรไฟล์"
