@@ -299,21 +299,49 @@ def reply_slip_selection_flex(reply_token: str, total: float, slip_data: list[di
     for idx, d in enumerate(slip_data, 1):
         bank = d.get("bank") or "สลิปโอนเงิน"
         amt = d.get("amount") or 0.0
+        sender = d.get("sender") or ""
+        receiver = d.get("receiver") or ""
+        
         if amt > 0:
             amt_text = f"{amt:,.2f} บาท"
-            amt_color = "#E2E8F0"
+            amt_color = "#60A5FA"
         else:
             amt_text = "อ่านยอดไม่ได้"
             amt_color = "#F87171"
             
+        contents = [
+            {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                    {"type": "text", "text": f"{idx}. {bank}", "size": "sm", "color": "#F1F5F9", "weight": "bold", "flex": 6},
+                    {"type": "text", "text": amt_text, "size": "sm", "color": amt_color, "weight": "bold", "align": "end", "flex": 4}
+                ]
+            }
+        ]
+        
+        if sender or receiver:
+            s_name = sender if sender else "ไม่ระบุ"
+            r_name = receiver if receiver else "ไม่ระบุ"
+            contents.append({
+                "type": "text",
+                "text": f"👤 {s_name} ➔ 👤 {r_name}",
+                "size": "xxs",
+                "color": "#94A3B8",
+                "margin": "xs",
+                "wrap": True
+            })
+            
         item_contents.append({
             "type": "box",
-            "layout": "horizontal",
-            "margin": "xs",
-            "contents": [
-                {"type": "text", "text": f"{idx}. {bank}", "size": "xs", "color": "#94A3B8", "flex": 6},
-                {"type": "text", "text": amt_text, "size": "xs", "color": amt_color, "weight": "bold", "align": "end", "flex": 4}
-            ]
+            "layout": "vertical",
+            "margin": "sm",
+            "backgroundColor": "#0F172A",
+            "cornerRadius": "md",
+            "paddingAll": "8px",
+            "borderColor": "#334155",
+            "borderWidth": "1px",
+            "contents": contents
         })
 
     contents = {
@@ -829,7 +857,12 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
         for idx, s in enumerate(slips, 1):
             amt = s.get("amount") or 0.0
             bank = s.get("bank", "ไม่ระบุ")
-            lines.append(f"{idx}. {amt:,.2f} บาท ({bank})")
+            sender = s.get("sender") or ""
+            receiver = s.get("receiver") or ""
+            line = f"{idx}. {amt:,.2f} บาท ({bank})"
+            if sender or receiver:
+                line += f"\n   👤 {sender or 'ไม่ระบุ'} ➔ 👤 {receiver or 'ไม่ระบุ'}"
+            lines.append(line)
         reply_text(reply_token, "\n".join(lines))
         return
 
@@ -846,10 +879,14 @@ def handle_text_message(reply_token, session_key, text, request, source=None):
             bank = s.get("bank", "ไม่ระบุ")
             ref = s.get("ref") or "ไม่ระบุ"
             dt = s.get("datetime") or "ไม่ระบุ"
+            sender = s.get("sender") or "ไม่ระบุ"
+            receiver = s.get("receiver") or "ไม่ระบุ"
             msg = (
                 f"🧾 ข้อมูลสลิปใบที่ {idx}:\n"
                 f"💰 ยอดเงิน: {amt:,.2f} บาท\n"
                 f"🏦 ธนาคาร: {bank}\n"
+                f"👤 ผู้โอน: {sender}\n"
+                f"👤 ผู้รับ: {receiver}\n"
                 f"🔖 อ้างอิง: {ref}\n"
                 f"🕐 วันที่: {dt}"
             )
@@ -1254,7 +1291,7 @@ def _prompt_slip_type_selection(reply_token: str, session_key: str) -> None:
                 data = read_slip(img_path)
                 slip_data.append(data)
             except Exception:
-                slip_data.append({"amount": 0.0, "bank": "", "ref": "", "date": ""})
+                slip_data.append({"amount": 0.0, "bank": "", "ref": "", "datetime": "", "sender": "", "receiver": ""})
     total = sum(d.get("amount", 0) or 0 for d in slip_data)
 
     set_waiting_for_slip_type(session_key, slip_data)
@@ -1301,7 +1338,7 @@ def _process_and_summarize_slips(
                     data = read_slip(img_path)
                     slip_data.append(data)
                 except Exception:
-                    slip_data.append({"amount": 0.0, "bank": "", "ref": "", "date": ""})
+                    slip_data.append({"amount": 0.0, "bank": "", "ref": "", "datetime": "", "sender": "", "receiver": ""})
         else:
             # ข้อมูลครบพร้อมแล้ว ไม่ต้องรอ
             pass
@@ -1314,12 +1351,16 @@ def _process_and_summarize_slips(
         for idx, d in valid:
             bank = d.get("bank", "")
             amt = d.get("amount", 0)
-            date = d.get("date", "")
-            line = f"{idx}. {amt:,.0f} บาท"
+            date = d.get("datetime") or d.get("date") or ""
+            sender = d.get("sender") or ""
+            receiver = d.get("receiver") or ""
+            line = f"{idx}. {amt:,.2f} บาท"
             if bank:
-                line += f"  ({bank})"
+                line += f" ({bank})"
             if date:
-                line += f"  {date}"
+                line += f" [{date}]"
+            if sender or receiver:
+                line += f"\n   👤 {sender or 'ไม่ระบุ'} ➔ 👤 {receiver or 'ไม่ระบุ'}"
             lines.append(line)
         for idx in failed:
             lines.append(f"{idx}. — (อ่านไม่ได้)")
@@ -1350,9 +1391,11 @@ def _process_and_summarize_slips(
                 amount=d.get("amount"),
                 bank=d.get("bank", ""),
                 ref=d.get("ref", ""),
-                dt=d.get("date", ""),
+                dt=d.get("datetime") or d.get("date") or "",
                 raw_text=json.dumps(d),
                 batch_id=batch_id,
+                sender=d.get("sender", ""),
+                receiver=d.get("receiver", ""),
             )
 
         reply_text(reply_token, "\n".join(lines))

@@ -4,12 +4,14 @@ import re
 
 
 def parse_slip(text: str) -> dict:
-    """Extract amount, bank, ref, datetime from OCR text."""
+    """Extract amount, bank, ref, datetime, sender, receiver from OCR text."""
     return {
         "amount":   _extract_amount(text),
         "bank":     _extract_bank(text),
         "ref":      _extract_ref(text),
         "datetime": _extract_datetime(text),
+        "sender":   "",
+        "receiver": "",
     }
 
 

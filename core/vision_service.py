@@ -127,17 +127,19 @@ def read_receipt(image_path: str) -> str:
 
 
 def read_slip(image_path: str) -> dict:
-    """อ่านสลิปโอนเงิน — คืน dict {amount, bank, ref, datetime, raw}"""
+    """อ่านสลิปโอนเงิน — คืน dict {amount, bank, ref, datetime, sender, receiver, raw}"""
     prompt = (
         "อ่านสลิปโอนเงินนี้แล้วดึงข้อมูลต่อไปนี้:\n"
         "AMOUNT: (ยอดเงิน ตัวเลขเท่านั้น)\n"
         "BANK: (ชื่อธนาคาร)\n"
         "REF: (เลขอ้างอิงหรือเลขธุรกรรม)\n"
         "DATE: (วันเวลา)\n"
+        "SENDER: (ชื่อผู้โอนเงิน / จากใคร เช่น นายสมชาย หรือ Somchay S. - ถ้าเป็นบุคคล/บริษัทใส่มาด้วย)\n"
+        "RECEIVER: (ชื่อผู้รับเงิน / โอนให้ใคร เช่น บจก. เอบีซี หรือ นายประหยัด)\n"
         "ถ้าไม่พบให้ใส่ NONE\n"
         "ตอบตามรูปแบบนี้เท่านั้น ห้ามเพิ่มข้อความอื่น"
     )
-    raw = _call_vision(image_path, prompt, max_tokens=200)
+    raw = _call_vision(image_path, prompt, max_tokens=250)
 
     def _extract(key: str) -> str:
         for line in raw.splitlines():
@@ -157,6 +159,8 @@ def read_slip(image_path: str) -> dict:
         "bank": _extract("BANK"),
         "ref": _extract("REF"),
         "datetime": _extract("DATE"),
+        "sender": _extract("SENDER"),
+        "receiver": _extract("RECEIVER"),
         "raw": raw,
     }
 

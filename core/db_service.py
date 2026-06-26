@@ -109,7 +109,9 @@ def init_db():
                 datetime  TEXT,
                 raw_text  TEXT,
                 created   TEXT NOT NULL,
-                batch_id  TEXT
+                batch_id  TEXT,
+                sender    TEXT,
+                receiver  TEXT
             );
             CREATE TABLE IF NOT EXISTS user_profile (
                 user_id    TEXT PRIMARY KEY,
@@ -149,7 +151,9 @@ def init_db():
                 datetime  TEXT,
                 raw_text  TEXT,
                 created   TEXT NOT NULL,
-                batch_id  TEXT
+                batch_id  TEXT,
+                sender    TEXT,
+                receiver  TEXT
             );
             CREATE TABLE IF NOT EXISTS user_profile (
                 user_id    TEXT PRIMARY KEY,
@@ -161,8 +165,10 @@ def init_db():
                 updated_at TEXT
             );
             """)
+        
+        for col in ["batch_id", "sender", "receiver"]:
             try:
-                conn.execute("ALTER TABLE slips ADD COLUMN batch_id TEXT")
+                conn.execute(f"ALTER TABLE slips ADD COLUMN {col} TEXT")
             except Exception:
                 pass
 
@@ -289,10 +295,12 @@ def save_slip(
     dt: str,
     raw_text: str,
     batch_id: str | None = None,
+    sender: str = "",
+    receiver: str = "",
 ) -> None:
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO slips (user_id,amount,bank,ref,datetime,raw_text,created,batch_id) VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO slips (user_id,amount,bank,ref,datetime,raw_text,created,batch_id,sender,receiver) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
                 user_id,
                 amount,
@@ -302,6 +310,8 @@ def save_slip(
                 raw_text,
                 get_thailand_now().isoformat(),
                 batch_id,
+                sender,
+                receiver,
             ),
         )
 
