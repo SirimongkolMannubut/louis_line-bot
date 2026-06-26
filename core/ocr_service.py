@@ -41,23 +41,36 @@ def _check_tesseract() -> tuple[bool, str]:
 # ตรวจตอน import module
 _TESSERACT_OK, _TESSERACT_INFO = _check_tesseract()
 if _TESSERACT_OK:
-    print(f"[OCR] ✅ Tesseract ready: v{_TESSERACT_INFO}  lang={OCR_LANG}")
+    print(f"[OCR] [OK] Tesseract ready: v{_TESSERACT_INFO}  lang={OCR_LANG}")
 else:
-    print(f"[OCR] ⚠️ Tesseract NOT found: {_TESSERACT_INFO}")
+    print(f"[OCR] [WARNING] Tesseract NOT found: {_TESSERACT_INFO}")
     print("[OCR] OCR features will be unavailable until Tesseract is installed.")
 
 
+
 def extract_text_from_images(image_paths: list[str]) -> str:
-    if not _TESSERACT_OK:
-        raise OCRUnavailableError(
-            "Tesseract OCR ยังไม่ได้ติดตั้งใน server ครับ กรุณาแจ้ง admin เพื่อ deploy ใหม่"
-        )
     texts: list[str] = []
     for image_path in image_paths:
-        text = extract_text_from_image(image_path)
+        text = ""
+        if _TESSERACT_OK:
+            try:
+                text = extract_text_from_image(image_path)
+            except Exception as e:
+                print(f"[OCR] Tesseract error: {e}")
+                text = ""
+        
+        if not text:
+            # Fallback to Vision LLM
+            try:
+                from core.vision_service import extract_raw_text
+                text = extract_raw_text(image_path)
+            except Exception as e:
+                print(f"[OCR] Vision fallback error: {e}")
+                text = ""
         if text:
             texts.append(text)
     return "\n\n".join(texts).strip()
+
 
 
 def extract_text_from_image(image_path: str) -> str:

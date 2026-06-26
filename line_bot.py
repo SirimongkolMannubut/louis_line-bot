@@ -1537,7 +1537,10 @@ def _reply_profile(reply_token: str, user_id: str) -> None:
             f"🌐 หรือกดที่นี่เพื่อตั้งค่าโปรไฟล์: {LIFF_PROFILE_URL}"
         )
         return
-    lines = []
+        
+    avatar = profile.get("avatar") or "👤"
+    lines = [f"{avatar} โปรไฟล์ของฉัน", "─" * 28]
+    
     if profile.get("name"):
         lines.append(f"👤 ชื่อ: {profile['name']}")
     if profile.get("age"):
@@ -1546,9 +1549,26 @@ def _reply_profile(reply_token: str, user_id: str) -> None:
         lines.append(f"💼 อาชีพ: {profile['job']}")
     if profile.get("location"):
         lines.append(f"📍 ที่อยู่: {profile['location']}")
-    for k, v in profile.items():
-        if k not in {"name", "age", "job", "location"}:
-            lines.append(f"• {k}: {v}")
+        
+    # Finance info if set
+    limit = profile.get("monthlyLimit")
+    goal = profile.get("savingsGoal")
+    if limit or goal:
+        lines.append("─" * 28)
+        lines.append("📊 เป้าหมายการเงินรายเดือน:")
+        if limit:
+            try:
+                limit_val = float(limit)
+                lines.append(f"   💸 จำกัดรายจ่าย: {limit_val:,.2f} บาท")
+            except ValueError:
+                lines.append(f"   💸 จำกัดรายจ่าย: {limit} บาท")
+        if goal:
+            try:
+                goal_val = float(goal)
+                lines.append(f"   🎯 เป้าหมายออม: {goal_val:,.2f} บาท")
+            except ValueError:
+                lines.append(f"   🎯 เป้าหมายออม: {goal} บาท")
+                
     lines.append(f"\n🌐 หรือกดที่นี่เพื่อแก้ไขโปรไฟล์: {LIFF_PROFILE_URL}")
     reply_text(reply_token, "\n".join(lines))
 

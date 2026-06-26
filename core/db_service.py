@@ -166,11 +166,13 @@ def init_db():
             );
             """)
         
-        for col in ["batch_id", "sender", "receiver"]:
-            try:
-                conn.execute(f"ALTER TABLE slips ADD COLUMN {col} TEXT")
-            except Exception:
-                pass
+    for col in ["batch_id", "sender", "receiver"]:
+        try:
+            with get_conn() as conn2:
+                conn2.execute(f"ALTER TABLE slips ADD COLUMN {col} TEXT")
+        except Exception:
+            pass
+
 
 
 # ── Transactions ──────────────────────────────────────────────────────────────
